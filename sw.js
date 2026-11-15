@@ -1,5 +1,5 @@
 // Offline support. Raise VERSION when you upload a new copy of the app.
-const VERSION = "wrt-v9";
+const VERSION = "wrt-v10";
 const SHELL = ["./", "index.html", "jspdf.umd.min.js", "icd10.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 // Fetch fresh copies on install, so a new version never stores an old page from the browser cache.
 self.addEventListener("install", e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL.map(u => new Request(u, {cache: "reload"})))).then(() => self.skipWaiting())); });
