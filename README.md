@@ -61,6 +61,8 @@ Smart H, Sibbald RG, Goodman L, Ayello EA, Jaimangal R, Gregory JH, et al. Wound
 
 The code search uses the ICD-10 WHO 2019 list of three and four character codes, bundled in `icd10.js` so the search works offline and sends nothing out.
 
+- A quick list of wound care codes from the practice code sheets (diagnosis, ICD-10 code and PMB code) appears first in the results. The practice sheets include South African five character codes.
+- A code missing from every list is typed by hand and saved to a personal list on the device.
 - South African medical schemes follow the ICD-10 Master Industry Table (MIT) from the National Department of Health. The MIT builds on WHO ICD-10 and adds local rules, for example extra characters on external cause codes such as W01.09. Check every code against the current MIT before you submit.
 - The US ICD-10-CM code set is a different system and is not used here.
 - ICD-10 is copyright of the World Health Organization. The code list is not covered by the MIT licence of this app.
