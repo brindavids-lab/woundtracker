@@ -90,6 +90,10 @@ svg text{font-family:var(--body)}
 .bodymap{display:flex;flex-direction:column;gap:8px;align-items:center}
 .bodymap svg{width:100%;max-width:290px;height:auto;touch-action:manipulation}
 .paper td.wh{background:#d5e2e2;font-weight:bold;text-align:center}
+.bar{display:grid;grid-template-columns:minmax(110px,38%) 1fr 28px;gap:10px;align-items:center;font-size:.9rem}
+.bar .track{background:var(--bg);border-radius:6px;height:14px;overflow:hidden}
+.bar .track i{display:block;height:100%;background:var(--accent);border-radius:6px}
+.bar b{text-align:right;font-variant-numeric:tabular-nums}
 .notice{border:1px solid var(--warn);color:var(--warn);border-radius:10px;padding:10px 12px;font-size:.9rem}
 .actions{display:flex;gap:8px;flex-wrap:wrap}
 .paperwrap{overflow-x:auto}
@@ -183,7 +187,7 @@ const store = (()=>{
 
 /* ---------- state ---------- */
 let cases=[]; let settings={practitioner:"",title:"Sr.",practiceNo:"",email:"",phone:""};
-const ui={view:"home",caseId:null,tab:"details",openVisit:null,woundId:null,bodyMap:false,bodyView:"front"};
+const ui={view:"dash",caseId:null,tab:"details",openVisit:null,woundId:null,bodyMap:false,bodyView:"front"};
 const cur = () => cases.find(c=>c.id===ui.caseId);
 let saveT; function queueSave(){ const c=cur(); if(!c) return; clearTimeout(saveT); saveT=setTimeout(()=>saveCase(c),300); }
 function saveCase(c){ c.updated=Date.now(); return store.set("cases",c.id,JSON.parse(JSON.stringify(c))); }
@@ -227,29 +231,61 @@ function area_(label,bind,value,ph=""){ return `<label class="f" for="${fid(bind
 /* ---------- views ---------- */
 function render(){
   const app=$("#app"); const c=cur();
-  if(ui.view==="case"&&c) app.innerHTML=viewCase(c); else if(ui.view==="settings") app.innerHTML=viewSettings(); else { ui.view="home"; app.innerHTML=viewHome(); }
+  if(ui.view==="case"&&c) app.innerHTML=viewCase(c); else if(ui.view==="settings") app.innerHTML=viewSettings(); else if(ui.view==="home") app.innerHTML=viewHome(); else { ui.view="dash"; app.innerHTML=viewDash(); }
   hydrate(); if($("#icd-desc")) icdDescribe();
 }
 async function hydrate(){ for(const img of document.querySelectorAll("img[data-pid]")){ if(img.getAttribute("src")) continue; const p=await getPhoto(img.dataset.pid); if(p) img.src=p.data; } }
 const storageNote = () => store.ok?"":`<div class="notice">This browser is not saving data. Download a backup from Settings before you close this page.</div>`;
 
-function viewHome(){
-  const list=[...cases].sort((a,b)=>(b.updated||0)-(a.updated||0));
-  return `<div class="top"><div class="grow"><h1>Wound Report Tracker</h1><div class="muted">Wound management reports for medical scheme authorisation</div></div>
-  <button data-action="settings">Settings</button><button class="primary" data-action="newCase">New patient</button></div>${storageNote()}
-  <div class="list">${list.map(c=>{ const vs=visitsAsc({visits:allVisits(c)}), last=vs[vs.length-1], pid=last&&last.photos[0], nw=c.wounds.length;
-    return `<button class="caserow" data-action="openCase" data-id="${c.id}">${pid?`<span class="thumb" style="width:64px;height:64px;flex:none"><img data-pid="${pid}" alt=""></span>`:""}
-    <span class="grow"><strong>${esc(c.name||"Unnamed patient")} ${c.example?'<span class="tag">Example</span>':""}</strong>
-    <span class="muted">${esc([c.wounds.map(w=>w.site).filter(Boolean).join(", "),c.aid].filter(Boolean).join(" · ")||"No details yet")}</span>
-    <span class="muted">${nw>1?nw+" wounds · ":""}${vs.length} visit${vs.length===1?"":"s"}${last?" · last "+shortDate(last.date):""}</span></span>${nw>1?`<span class="pill flat">${nw} wounds</span>`:changePill(c.wounds[0])}</button>`; }).join("")||'<div class="card"><p class="muted">No patients yet. Press New patient to start a report.</p></div>'}</div>
+const addDays=(iso,n)=>{ const d=new Date(iso+"T00:00:00Z"); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); };
+const dayDiff=(a,b)=>Math.round((new Date(b+"T00:00:00Z")-new Date(a+"T00:00:00Z"))/864e5);
+let lastBackup=null;
+function dashData(){ const t=today(), in7=addDays(t,7), ago7=addDays(t,-7), alerts=[], recent=[], types={}; let wounds=0, visits7=0;
+  for(const c of cases) for(const w of c.wounds){ wounds++; const n=c.wounds.indexOf(w)+1, vs=visitsAsc(w), last=vs[vs.length-1], who=(c.name||"Unnamed patient")+(c.wounds.length>1?" · wound "+n:"")+(w.site?" · "+w.site:"");
+    for(const k of (w.types.length?w.types:["Type not set"])) types[k]=(types[k]||0)+1;
+    for(const v of vs){ if(v.date>ago7&&v.date<=t) visits7++; recent.push({c,w,v,who}); }
+    const pts=vs.filter(v=>area(v)!=null&&v.date); const go=`${c.id}|${w.id}`;
+    if(last&&last.infection&&last.infection!=="None") alerts.push({lvl:"bad",who,go,msg:"Infection recorded at the last visit: "+last.infection});
+    if(pts.length>1){ const a=area(pts[pts.length-1]), p=area(pts[pts.length-2]), f=area(pts[0]), days=dayDiff(pts[0].date,pts[pts.length-1].date), red=Math.round((f-a)/f*100);
+      if(a>p) alerts.push({lvl:"bad",who,go,msg:`Area grew from ${p} to ${a} cm² since the visit before`});
+      else if(days>=28&&red<30&&(!w.healability||w.healability==="Healable wound")) alerts.push({lvl:"warn",who,go,msg:`${red<0?0:red}% smaller after ${days} days. Review the treatment plan`}); } }
+  const due=cases.filter(c=>c.nextVisit&&c.nextVisit<=in7).sort((a,b)=>a.nextVisit.localeCompare(b.nextVisit)).map(c=>({c,late:c.nextVisit<t,today:c.nextVisit===t}));
+  const fields=[["name","patient name"],["aid","medical aid name"],["aidNo","medical aid number"],["idNo","ID number"],["icd","ICD-10 codes"]];
+  const gaps=cases.filter(c=>!c.example).map(c=>({c,miss:fields.filter(([k])=>!c[k]).map(x=>x[1]).concat(c.wounds.some(w=>!w.site)?["wound site"]:[],c.wounds.some(w=>!w.visits.length)?["first visit"]:[])})).filter(x=>x.miss.length);
+  recent.sort((a,b)=>(b.v.date||"").localeCompare(a.v.date||""));
+  return {t,wounds,visits7,alerts,due,gaps,recent:recent.slice(0,5),types:Object.entries(types).sort((a,b)=>b[1]-a[1])}; }
+function viewDash(){ const d=dashData(), real=cases.some(c=>!c.example), bdays=lastBackup?Math.floor((Date.now()-lastBackup)/864e5):null;
+  const rowBtn=(action,id,main,sub,pill)=>`<button class="caserow" data-action="${action}" data-id="${id}"><span class="grow"><strong>${esc(main)}</strong><span class="muted">${esc(sub)}</span></span>${pill||""}</button>`;
+  const maxT=Math.max(1,...d.types.map(x=>x[1]));
+  return `<div class="top"><div class="grow"><h1>Wound Report Tracker</h1><div class="muted">${esc(fmtDate(d.t))}${settings.practitioner?" · "+esc(settings.title+" "+settings.practitioner):""}</div></div><button data-action="settings">Settings</button></div>${storageNote()}
+  ${!settings.practitioner?'<div class="notice">Add your practitioner details in Settings. They print on every report.</div>':""}
+  <div class="actions"><button class="primary" data-action="patients">Patients (${cases.length})</button><button data-action="newCase">New patient</button></div>
+  <div class="tiles"><div class="tile"><span class="muted">Patients</span><b>${cases.length}</b></div><div class="tile"><span class="muted">Wounds tracked</span><b>${d.wounds}</b></div>
+  <div class="tile"><span class="muted">Visits, last 7 days</span><b>${d.visits7}</b></div><div class="tile"><span class="muted">Follow ups due</span><b>${d.due.length}</b><span class="muted">${d.due.filter(x=>x.late).length} overdue</span></div></div>
+  <div class="card"><h2>Needs attention</h2>${d.alerts.map(a=>rowBtn("goWound",a.go,a.who,a.msg,`<span class="pill ${a.lvl}">${a.lvl==="bad"?"Act":"Review"}</span>`)).join("")||'<div class="muted">No wounds flagged. A wound appears here when the area grows, when a healable wound is under 30% smaller after 4 weeks, or when infection is recorded.</div>'}</div>
+  <div class="card"><h2>Follow ups, next 7 days</h2>${d.due.map(x=>rowBtn("openCase",x.c.id,x.c.name||"Unnamed patient",fmtDate(x.c.nextVisit)+(x.c.frequency?" · "+x.c.frequency:""),`<span class="pill ${x.late?"bad":x.today?"warn":"flat"}">${x.late?"Overdue":x.today?"Today":"Upcoming"}</span>`)).join("")||'<div class="muted">No follow up visits due. Set the next follow up date on each patient.</div>'}</div>
+  ${d.gaps.length?`<div class="card"><h2>Reports missing details</h2>${d.gaps.map(x=>rowBtn("openCase",x.c.id,x.c.name||"Unnamed patient","Missing: "+x.miss.join(", "))).join("")}</div>`:""}
+  <div class="card"><h2>Wounds by type</h2>${d.types.map(([k,n])=>`<div class="bar"><span>${esc(k)}</span><span class="track"><i style="width:${Math.round(n/maxT*100)}%"></i></span><b>${n}</b></div>`).join("")||'<div class="muted">No wounds yet.</div>'}</div>
+  <div class="card"><h2>Recent visits</h2>${d.recent.map(r=>rowBtn("goWound",`${r.c.id}|${r.w.id}`,r.who,shortDate(r.v.date)+(dimText(r.v)?" · "+dimText(r.v):"")+(r.v.phase?" · "+r.v.phase:""))).join("")||'<div class="muted">No visits yet.</div>'}</div>
+  ${real?`<div class="card"><h2>Backup</h2><div class="${bdays==null||bdays>7?"notice":"muted"}">${bdays==null?"No backup made on this device yet.":bdays===0?"Last backup: today.":"Last backup: "+bdays+" day"+(bdays===1?"":"s")+" ago."} Records live on this device only.</div><div class="actions"><button data-action="backup">Download backup</button></div></div>`:""}
   <div class="card"><h2>Clinical basis</h2><p class="muted" style="margin:0">The design of this tracker follows the wound bed preparation paradigm: treat the cause, address patient-centred concerns, determine healability, and manage local wound care.</p>
   <p style="margin:0;font-size:.9rem">Smart H, Sibbald RG, Goodman L, Ayello EA, Jaimangal R, Gregory JH, et al. Wound Bed Preparation 2024: Delphi Consensus on Foot Ulcer Management in Resource-Limited Settings. <i>Advances in Skin &amp; Wound Care</i>. 2024;37(4):180-196. PMID 38354304.</p>
   <p style="margin:0;font-size:.9rem"><a href="https://doi.org/10.1097/ASW.0000000000000120" target="_blank" rel="noopener" style="color:var(--accent);word-break:break-all">https://doi.org/10.1097/ASW.0000000000000120</a></p></div>
-  <p class="muted">Private by design. Patient records and photos stay on this device. This app sends nothing to any server. Open source under the MIT licence. App version 10.</p>`;
+  <p class="muted">Private by design. Patient records and photos stay on this device. This app sends nothing to any server. Open source under the MIT licence. App version 11.</p>`;
+}
+function viewHome(){
+  const list=[...cases].sort((a,b)=>(b.updated||0)-(a.updated||0));
+  return `<div class="top"><button data-action="dash">Back</button><div class="grow"><h1>Patients</h1></div><button class="primary" data-action="newCase">New patient</button></div>${storageNote()}
+  ${list.length>5?'<label class="f" for="pt-q">Find a patient<input id="pt-q" type="search" autocomplete="off" placeholder="Name, medical aid number or site"></label>':""}
+  <div class="list" id="ptlist">${list.map(c=>{ const vs=visitsAsc({visits:allVisits(c)}), last=vs[vs.length-1], pid=last&&last.photos[0], nw=c.wounds.length;
+    return `<button class="caserow" data-find="${esc([c.name,c.aid,c.aidNo,c.idNo,c.wounds.map(w=>w.site).join(" ")].join(" ").toLowerCase())}" data-action="openCase" data-id="${c.id}">${pid?`<span class="thumb" style="width:64px;height:64px;flex:none"><img data-pid="${pid}" alt=""></span>`:""}
+    <span class="grow"><strong>${esc(c.name||"Unnamed patient")} ${c.example?'<span class="tag">Example</span>':""}</strong>
+    <span class="muted">${esc([c.wounds.map(w=>w.site).filter(Boolean).join(", "),c.aid].filter(Boolean).join(" · ")||"No details yet")}</span>
+    <span class="muted">${nw>1?nw+" wounds · ":""}${vs.length} visit${vs.length===1?"":"s"}${last?" · last "+shortDate(last.date):""}</span></span>${nw>1?`<span class="pill flat">${nw} wounds</span>`:changePill(c.wounds[0])}</button>`; }).join("")||'<div class="card"><p class="muted">No patients yet. Press New patient to start a report.</p></div>'}</div>`;
 }
 
 function viewSettings(){
-  return `<div class="top"><button data-action="home">Back</button><div class="grow"><h1>Settings</h1></div></div>${storageNote()}
+  return `<div class="top"><button data-action="dash">Back</button><div class="grow"><h1>Settings</h1></div></div>${storageNote()}
   <div class="card"><h2>Practitioner details</h2><div class="muted">These appear on every report.</div><div class="grid">
   ${inp("Title","set|title",settings.title)}${inp("Treating practitioner","set|practitioner",settings.practitioner)}${inp("Treating practitioner practice number","set|practiceNo",settings.practiceNo)}
   ${inp("Email for authorisation numbers","set|email",settings.email,"email")}${inp("Contact number","set|phone",settings.phone,"tel")}</div></div>
@@ -443,13 +479,13 @@ async function saveFile(filename,blob){
 async function fileToPhoto(file){ const url=URL.createObjectURL(file); try{ const img=new Image(); await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; img.src=url; });
   const s=Math.min(1,1400/Math.max(img.naturalWidth,img.naturalHeight)); const cv=document.createElement("canvas"); cv.width=Math.round(img.naturalWidth*s); cv.height=Math.round(img.naturalHeight*s);
   cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height); return {data:cv.toDataURL("image/jpeg",0.82),w:cv.width,h:cv.height}; } finally{ URL.revokeObjectURL(url); } }
-async function backup(){ const photos={}; for(const k of await store.keys("photos")) photos[k]=await store.get("photos",k);
+async function backup(){ lastBackup=Date.now(); store.set("meta","lastBackup",lastBackup); const photos={}; for(const k of await store.keys("photos")) photos[k]=await store.get("photos",k);
   await saveFile("wound-report-backup-"+today()+".json",new Blob([JSON.stringify({app:"wound-report-tracker",version:1,settings,cases,photos})],{type:"application/json"})); }
 async function restore(file){ try{ const d=JSON.parse(await file.text()); if(d.app!=="wound-report-tracker") throw 0;
   for(const [k,p] of Object.entries(d.photos||{})) await store.set("photos",k,p);
   for(const c of d.cases||[]){ normalize(c); const i=cases.findIndex(x=>x.id===c.id); if(i>=0) cases[i]=c; else cases.push(c); await store.set("cases",c.id,c); }
   if(d.settings){ settings={...settings,...d.settings}; await store.set("meta","settings",settings); }
-  toast("Backup restored: "+(d.cases||[]).length+" patients"); ui.view="home"; render(); }catch(e){ toast("This file is not a Wound Report Tracker backup"); } }
+  toast("Backup restored: "+(d.cases||[]).length+" patients"); ui.view="dash"; render(); }catch(e){ toast("This file is not a Wound Report Tracker backup"); } }
 
 /* ---------- ICD-10 search (code list bundled with the app, loaded on first use) ---------- */
 let icdP=null, icdMap=null, icdIdx=null;
@@ -488,7 +524,7 @@ function icdAddToCase(c,id){ const codes=(c.icd||"").split(/[\s,;]+/).filter(Boo
 function icdSaveOwn(code,label){ const list=settings.customIcd=(settings.customIcd||[]).filter(x=>x.code!==code); list.unshift({code,label}); store.set("meta","settings",settings); }
 
 /* ---------- events ---------- */
-let icdT; document.addEventListener("input",e=>{ if(e.target.id==="icd-q"){ const q=e.target.value; clearTimeout(icdT); icdT=setTimeout(()=>icdRun(q),180); return; } if(e.target.id===fid("case|icd")){ clearTimeout(icdT); icdT=setTimeout(icdDescribe,400); } const b=e.target.dataset&&e.target.dataset.bind; if(!b) return; const [kind,a,k]=b.split("|"); const val=e.target.value;
+let icdT; document.addEventListener("input",e=>{ if(e.target.id==="pt-q"){ const q=e.target.value.trim().toLowerCase(); for(const r of document.querySelectorAll("#ptlist [data-find]")) r.style.display=r.dataset.find.includes(q)?"":"none"; return; } if(e.target.id==="icd-q"){ const q=e.target.value; clearTimeout(icdT); icdT=setTimeout(()=>icdRun(q),180); return; } if(e.target.id===fid("case|icd")){ clearTimeout(icdT); icdT=setTimeout(icdDescribe,400); } const b=e.target.dataset&&e.target.dataset.bind; if(!b) return; const [kind,a,k]=b.split("|"); const val=e.target.value;
   if(kind==="set"){ settings[a]=val; queueSettings(); return; } const c=cur(); if(!c) return;
   if(kind==="case") c[a]=val; else if(kind==="wound") curW()[a]=val; else { const v=curW().visits.find(x=>x.id===a); if(v) v[k]=val; } queueSave(); if(e.target.dataset.rerender) render(); });
 document.addEventListener("change",async e=>{ const t=e.target; if(t.dataset.wsite){ const c=cur(), w=curW(); if(!w) return; w[t.dataset.wsite]=t.value; w.site=siteText(w); saveCase(c); render(); return; }
@@ -502,6 +538,9 @@ document.addEventListener("click",async e=>{ const el=e.target.closest("[data-ac
   switch(act){
     case "home": if(c) await saveCase(c); ui.view="home"; ui.caseId=null; break;
     case "settings": ui.view="settings"; break;
+    case "dash": ui.view="dash"; ui.caseId=null; break;
+    case "patients": ui.view="home"; ui.caseId=null; break;
+    case "goWound": { const [cid,wid]=id.split("|"); Object.assign(ui,{view:"case",caseId:cid,woundId:wid,tab:"progress",openVisit:null,bodyMap:false}); break; }
     case "newCase": { const n=newCase(); cases.push(n); await saveCase(n); Object.assign(ui,{view:"case",caseId:n.id,tab:"details",woundId:null,openVisit:null,bodyMap:false}); break; }
     case "openCase": Object.assign(ui,{view:"case",caseId:id,tab:"details",openVisit:null,woundId:null,bodyMap:false}); break;
     case "tab": ui.tab=id; break;
@@ -528,13 +567,13 @@ document.addEventListener("click",async e=>{ const el=e.target.closest("[data-ac
     case "print": window.print(); return;
     case "backup": await backup(); return;
   }
-  render(); if(["home","settings","newCase","openCase","tab"].includes(act)) window.scrollTo(0,0);
+  render(); if(["home","settings","newCase","openCase","tab","dash","patients","goWound"].includes(act)) window.scrollTo(0,0);
 });
 window.addEventListener("pagehide",()=>{ const c=cur(); if(c) saveCase(c); });
 
 (async function init(){
   const s=await store.get("meta","settings"); if(s) settings={...settings,...s};
-  cases=(await store.all("cases")||[]).map(normalize);
+  cases=(await store.all("cases")||[]).map(normalize); lastBackup=await store.get("meta","lastBackup")||null;
   if(!cases.length && !(await store.get("meta","seeded"))) await seed();
   render();
   if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
