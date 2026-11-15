@@ -49,6 +49,12 @@ After changing any file, raise `VERSION` in `sw.js` (wrt-v2, wrt-v3) so installe
 - `jspdf.umd.min.js`: jsPDF 2.5.1 (MIT licence), bundled for offline PDF export
 - `manifest.webmanifest`, `icons/`, `sw.js`: install and offline support
 
+## Clinical basis
+
+The design follows the wound bed preparation paradigm described in this Delphi consensus:
+
+Smart H, Sibbald RG, Goodman L, Ayello EA, Jaimangal R, Gregory JH, et al. Wound Bed Preparation 2024: Delphi Consensus on Foot Ulcer Management in Resource-Limited Settings. Advances in Skin & Wound Care. 2024;37(4):180-196. PMID 38354304. https://doi.org/10.1097/ASW.0000000000000120
+
 ## Licence
 
 MIT. See `LICENSE`. You are free to use, copy, change and share the code.

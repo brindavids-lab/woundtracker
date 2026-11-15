@@ -224,6 +224,9 @@ function viewHome(){
     <span class="grow"><strong>${esc(c.name||"Unnamed patient")} ${c.example?'<span class="tag">Example</span>':""}</strong>
     <span class="muted">${esc([c.site,c.aid].filter(Boolean).join(" · ")||"No details yet")}</span>
     <span class="muted">${vs.length} visit${vs.length===1?"":"s"}${last?" · last "+shortDate(last.date):""}</span></span>${changePill(c)}</button>`; }).join("")||'<div class="card"><p class="muted">No patients yet. Press New patient to start a report.</p></div>'}</div>
+  <div class="card"><h2>Clinical basis</h2><p class="muted" style="margin:0">The design of this tracker follows the wound bed preparation paradigm: treat the cause, address patient-centred concerns, determine healability, and manage local wound care.</p>
+  <p style="margin:0;font-size:.9rem">Smart H, Sibbald RG, Goodman L, Ayello EA, Jaimangal R, Gregory JH, et al. Wound Bed Preparation 2024: Delphi Consensus on Foot Ulcer Management in Resource-Limited Settings. <i>Advances in Skin &amp; Wound Care</i>. 2024;37(4):180-196. PMID 38354304.</p>
+  <p style="margin:0;font-size:.9rem"><a href="https://doi.org/10.1097/ASW.0000000000000120" target="_blank" rel="noopener" style="color:var(--accent);word-break:break-all">https://doi.org/10.1097/ASW.0000000000000120</a></p></div>
   <p class="muted">Private by design. Patient records and photos stay on this device. This app sends nothing to any server. Open source under the MIT licence.</p>`;
 }
 
