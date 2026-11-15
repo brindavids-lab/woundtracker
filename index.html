@@ -85,6 +85,11 @@ svg text{font-family:var(--body)}
 .icdrow{justify-content:flex-start;text-align:left;gap:10px;min-height:40px;padding:8px 10px;font-weight:400;width:100%}
 .icdrow b{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--accent)}
 .tag2{font-size:.7rem;border:1px solid var(--line);border-radius:6px;padding:0 5px;color:var(--muted);white-space:nowrap}
+.bp{fill:var(--bg);stroke:var(--muted);stroke-width:1.2;cursor:pointer}
+.bp.on{fill:var(--accent);stroke:var(--accent)}
+.bodymap{display:flex;flex-direction:column;gap:8px;align-items:center}
+.bodymap svg{width:100%;max-width:290px;height:auto;touch-action:manipulation}
+.paper td.wh{background:#d5e2e2;font-weight:bold;text-align:center}
 .notice{border:1px solid var(--warn);color:var(--warn);border-radius:10px;padding:10px 12px;font-size:.9rem}
 .actions{display:flex;gap:8px;flex-wrap:wrap}
 .paperwrap{overflow-x:auto}
@@ -178,15 +183,24 @@ const store = (()=>{
 
 /* ---------- state ---------- */
 let cases=[]; let settings={practitioner:"",title:"Sr.",practiceNo:"",email:"",phone:""};
-const ui={view:"home",caseId:null,tab:"details",openVisit:null};
+const ui={view:"home",caseId:null,tab:"details",openVisit:null,woundId:null,bodyMap:false,bodyView:"front"};
 const cur = () => cases.find(c=>c.id===ui.caseId);
 let saveT; function queueSave(){ const c=cur(); if(!c) return; clearTimeout(saveT); saveT=setTimeout(()=>saveCase(c),300); }
 function saveCase(c){ c.updated=Date.now(); return store.set("cases",c.id,JSON.parse(JSON.stringify(c))); }
 let setT; function queueSettings(){ clearTimeout(setT); setT=setTimeout(()=>store.set("meta","settings",settings),300); }
 const photoCache=new Map();
 async function getPhoto(id){ if(photoCache.has(id)) return photoCache.get(id); const p=await store.get("photos",id); if(p){ if(photoCache.size>40) photoCache.delete(photoCache.keys().next().value); photoCache.set(id,p); } return p; }
-function newCase(){ return {id:uid(),name:"",billing:"",aid:"",aidNo:"",idNo:"",dep:"",refDr:"",practiceNo:"",startDate:today(),site:"",icd:"",types:[],healability:"",history:"",dressings:"",frequency:"",nextVisit:"",reportPhotos:"last4",visits:[]}; }
-function newVisit(c){ const last=visitsAsc(c).pop()||{}; const v={id:uid(),date:today(),l:"",w:"",d:"",note:"",photos:[]}; for(const [k] of ASSESS) v[k]=last[k]||""; return v; }
+const SITES=["Head / face","Scalp / back of head","Neck (front)","Neck (back)","Chest","Breast","Abdomen","Groin / pelvis","Perineum","Upper back","Lower back","Sacrum","Coccyx","Buttock","Ischium","Hip / trochanter","Shoulder","Shoulder (back)","Upper arm","Upper arm (back)","Elbow","Forearm","Forearm (back)","Wrist","Hand","Finger","Thigh (front)","Thigh (back)","Knee","Knee (back)","Lower leg (shin)","Calf","Ankle","Inner ankle (medial malleolus)","Outer ankle (lateral malleolus)","Heel","Foot (top)","Foot (sole)","Toe","Amputation stump"];
+const SIDES=["Left","Right","Midline","Bilateral"];
+const siteText = w => w.region ? (w.side==="Midline" ? w.region+" (midline)" : w.side ? w.side+" "+w.region.charAt(0).toLowerCase()+w.region.slice(1) : w.region) : (w.site||"");
+function newWound(){ return {id:uid(),site:"",region:"",side:"",types:[],healability:"",dressings:"",visits:[]}; }
+function newCase(){ return {id:uid(),name:"",billing:"",aid:"",aidNo:"",idNo:"",dep:"",refDr:"",practiceNo:"",startDate:today(),icd:"",history:"",frequency:"",nextVisit:"",reportPhotos:"last4",wounds:[newWound()]}; }
+/* older records held one wound on the patient: move it into the wounds list */
+function normalize(c){ if(!Array.isArray(c.wounds)){ c.wounds=[{id:uid(),site:c.site||"",region:"",side:"",types:c.types||[],healability:c.healability||"",dressings:c.dressings||"",visits:c.visits||[]}]; for(const k of ["site","types","healability","dressings","visits"]) delete c[k]; }
+  if(!c.wounds.length) c.wounds.push(newWound()); for(const w of c.wounds){ w.types=w.types||[]; w.visits=w.visits||[]; } return c; }
+const curW = () => { const c=cur(); return c ? (c.wounds.find(w=>w.id===ui.woundId)||c.wounds[0]) : null; };
+const allVisits = c => c.wounds.flatMap(w=>w.visits);
+function newVisit(w){ const last=visitsAsc(w).pop()||{}; const v={id:uid(),date:today(),l:"",w:"",d:"",note:"",photos:[]}; for(const [k] of ASSESS) v[k]=last[k]||""; return v; }
 
 /* ---------- example case (fictional, drawn images) ---------- */
 function drawExample(l,w,label){ const cv=document.createElement("canvas"); cv.width=800; cv.height=600; const g=cv.getContext("2d");
@@ -195,11 +209,12 @@ function drawExample(l,w,label){ const cv=document.createElement("canvas"); cv.w
   for(let i=0;i<=10;i++) g.fillRect(40+i*32,520,2,i%5?14:24); g.font="600 22px sans-serif"; g.fillText("EXAMPLE IMAGE  "+label,40,50);
   return {data:cv.toDataURL("image/jpeg",0.8),w:800,h:600}; }
 async function seed(){
-  const c=newCase(); Object.assign(c,{example:true,name:"Example Patient",billing:"EX-0001",aid:"Example Medical Scheme",aidNo:"000000000",idNo:"0000000000000",dep:"00",refDr:"Dr Example",practiceNo:"0000000",startDate:"2026-09-01",site:"Lower Leg",icd:"L97 Z48.0",types:["Leg ulcer","Post surgical wound"],healability:"Healable wound",
-    history:"This is an example case. Replace this text with the treatment history, complications, co-morbidities and your request for authorisation.",dressings:"Dressing tray, cleaning solution, antimicrobial dressing, padding.",frequency:"2 x Weekly",nextVisit:"2026-10-02"});
+  const c=newCase(); Object.assign(c,{example:true,name:"Example Patient",billing:"EX-0001",aid:"Example Medical Scheme",aidNo:"000000000",idNo:"0000000000000",dep:"00",refDr:"Dr Example",practiceNo:"0000000",startDate:"2026-09-01",icd:"L97 Z48.0",
+    history:"This is an example case. Replace this text with the treatment history, complications, co-morbidities and your request for authorisation.",frequency:"2 x Weekly",nextVisit:"2026-10-02"});
+  const w0=c.wounds[0]; Object.assign(w0,{region:"Lower leg (shin)",side:"Left",site:"Left lower leg (shin)",types:["Leg ulcer","Post surgical wound"],healability:"Healable wound",dressings:"Dressing tray, cleaning solution, antimicrobial dressing, padding."});
   const rows=[["2026-09-01",8,6,1,"Inflammatory","Moderate"],["2026-09-08",7.5,5.5,0.8,"Inflammatory","Moderate"],["2026-09-18",6,4.5,0.5,"Proliferative","Low"],["2026-09-29",4.5,3,0.3,"Proliferative","Low"]];
   for(const [date,l,w,d,phase,lvl] of rows){ const pid=uid(); await store.set("photos",pid,drawExample(l,w,shortDate(date)));
-    c.visits.push({id:uid(),date,l:String(l),w:String(w),d:String(d),note:"",photos:[pid],bed:"Granulating",exType:"Serous (clear thin watery)",exLevel:lvl,edges:"Healthy / Intact",phase,infection:"None",painSev:"1-3",painFreq:"Only at dressing change",debridement:"Autolytic"}); }
+    w0.visits.push({id:uid(),date,l:String(l),w:String(w),d:String(d),note:"",photos:[pid],bed:"Granulating",exType:"Serous (clear thin watery)",exLevel:lvl,edges:"Healthy / Intact",phase,infection:"None",painSev:"1-3",painFreq:"Only at dressing change",debridement:"Autolytic"}); }
   cases.push(c); await saveCase(c); await store.set("meta","seeded",true);
 }
 
@@ -222,11 +237,11 @@ function viewHome(){
   const list=[...cases].sort((a,b)=>(b.updated||0)-(a.updated||0));
   return `<div class="top"><div class="grow"><h1>Wound Report Tracker</h1><div class="muted">Wound management reports for medical scheme authorisation</div></div>
   <button data-action="settings">Settings</button><button class="primary" data-action="newCase">New patient</button></div>${storageNote()}
-  <div class="list">${list.map(c=>{ const vs=visitsAsc(c), last=vs[vs.length-1], pid=last&&last.photos[0];
+  <div class="list">${list.map(c=>{ const vs=visitsAsc({visits:allVisits(c)}), last=vs[vs.length-1], pid=last&&last.photos[0], nw=c.wounds.length;
     return `<button class="caserow" data-action="openCase" data-id="${c.id}">${pid?`<span class="thumb" style="width:64px;height:64px;flex:none"><img data-pid="${pid}" alt=""></span>`:""}
     <span class="grow"><strong>${esc(c.name||"Unnamed patient")} ${c.example?'<span class="tag">Example</span>':""}</strong>
-    <span class="muted">${esc([c.site,c.aid].filter(Boolean).join(" · ")||"No details yet")}</span>
-    <span class="muted">${vs.length} visit${vs.length===1?"":"s"}${last?" · last "+shortDate(last.date):""}</span></span>${changePill(c)}</button>`; }).join("")||'<div class="card"><p class="muted">No patients yet. Press New patient to start a report.</p></div>'}</div>
+    <span class="muted">${esc([c.wounds.map(w=>w.site).filter(Boolean).join(", "),c.aid].filter(Boolean).join(" · ")||"No details yet")}</span>
+    <span class="muted">${nw>1?nw+" wounds · ":""}${vs.length} visit${vs.length===1?"":"s"}${last?" · last "+shortDate(last.date):""}</span></span>${nw>1?`<span class="pill flat">${nw} wounds</span>`:changePill(c.wounds[0])}</button>`; }).join("")||'<div class="card"><p class="muted">No patients yet. Press New patient to start a report.</p></div>'}</div>
   <div class="card"><h2>Clinical basis</h2><p class="muted" style="margin:0">The design of this tracker follows the wound bed preparation paradigm: treat the cause, address patient-centred concerns, determine healability, and manage local wound care.</p>
   <p style="margin:0;font-size:.9rem">Smart H, Sibbald RG, Goodman L, Ayello EA, Jaimangal R, Gregory JH, et al. Wound Bed Preparation 2024: Delphi Consensus on Foot Ulcer Management in Resource-Limited Settings. <i>Advances in Skin &amp; Wound Care</i>. 2024;37(4):180-196. PMID 38354304.</p>
   <p style="margin:0;font-size:.9rem"><a href="https://doi.org/10.1097/ASW.0000000000000120" target="_blank" rel="noopener" style="color:var(--accent);word-break:break-all">https://doi.org/10.1097/ASW.0000000000000120</a></p></div>
@@ -244,37 +259,58 @@ function viewSettings(){
   <div class="actions"><button data-action="backup">Download backup</button><label class="btn" for="restore">Restore from backup<input id="restore" type="file" accept=".json,application/json" data-restore="1"></label></div></div>`;
 }
 
+function woundBar(c,w){ return `<div class="chips noprint">${c.wounds.map((x,i)=>`<button aria-pressed="${x===w}" data-action="wound" data-id="${x.id}">Wound ${i+1}${x.site?" · "+esc(x.site):""}</button>`).join("")}<button data-action="addWound">Add wound</button></div>`; }
 function viewCase(c){
-  const tabs=[["details","Details"],["visits","Visits"],["progress","Progress"],["report","Report"]];
-  const body={details:tabDetails,visits:tabVisits,progress:tabProgress,report:tabReport}[ui.tab](c);
+  const tabs=[["details","Details"],["visits","Visits"],["progress","Progress"],["report","Report"]], w=curW();
+  const body={details:tabDetails,visits:tabVisits,progress:tabProgress,report:tabReport}[ui.tab](c,w);
   return `<div class="top noprint"><button data-action="home">Back</button><div class="grow"><h1>${esc(c.name||"New patient")} ${c.example?'<span class="tag">Example</span>':""}</h1>
-  <div class="muted">${esc([c.site,c.aid,c.aidNo].filter(Boolean).join(" · "))}</div></div></div>
-  <div class="tabs noprint" role="tablist">${tabs.map(([k,l])=>`<button role="tab" aria-selected="${ui.tab===k}" data-action="tab" data-id="${k}">${l}</button>`).join("")}</div>${body}`;
+  <div class="muted">${esc([c.aid,c.aidNo,c.wounds.length>1?c.wounds.length+" wounds":c.wounds[0].site].filter(Boolean).join(" · "))}</div></div></div>
+  <div class="tabs noprint" role="tablist">${tabs.map(([k,l])=>`<button role="tab" aria-selected="${ui.tab===k}" data-action="tab" data-id="${k}">${l}</button>`).join("")}</div>${ui.tab==="visits"||ui.tab==="progress"?woundBar(c,w):""}${body}`;
 }
 
-function tabDetails(c){
+/* body diagram: [area, paired, shape, x offset from the midline, y, width or rx, height or ry] */
+const BODY={front:[["Head / face",0,"e",0,28,14,17],["Neck (front)",0,"r",-6,45,12,10],["Chest",0,"r",-26,55,52,42],["Abdomen",0,"r",-24,97,48,34],["Groin / pelvis",0,"r",-24,131,48,22],["Shoulder",1,"e",34,62,9,9],["Upper arm",1,"r",33,71,14,42],["Elbow",1,"e",40,120,8,8],["Forearm",1,"r",34,128,14,38],["Hand",1,"e",42,177,8,11],["Thigh (front)",1,"r",2,153,22,52],["Knee",1,"e",13,213,11,9],["Lower leg (shin)",1,"r",4,222,19,43],["Ankle",1,"e",13.5,270,8,6],["Foot (top)",1,"e",14.5,284,10,7]],
+  back:[["Scalp / back of head",0,"e",0,28,14,17],["Neck (back)",0,"r",-6,45,12,10],["Upper back",0,"r",-26,55,52,42],["Lower back",0,"r",-24,97,48,28],["Buttock",1,"e",13,141,12,15],["Sacrum",0,"e",0,131,7,8],["Shoulder (back)",1,"e",34,62,9,9],["Upper arm (back)",1,"r",33,71,14,42],["Elbow",1,"e",40,120,8,8],["Forearm (back)",1,"r",34,128,14,38],["Hand",1,"e",42,177,8,11],["Thigh (back)",1,"r",2,157,22,48],["Knee (back)",1,"e",13,213,11,9],["Calf",1,"r",4,222,19,43],["Heel",1,"e",13.5,277,9,9]]};
+function bodyMap(w){ const view=ui.bodyView, parts=[];
+  for(const [name,paired,shape,x,y,a,b] of BODY[view]) for(const dir of paired?[1,-1]:[0]){ const side=!paired?"":(dir===1)===(view==="front")?"Left":"Right";
+    const on=w.region===name&&(paired?w.side===side:true), attr=`class="bp${on?" on":""}" data-action="site" data-id="${esc(name)}|${side}"`, t=`<title>${esc((side?side+" ":"")+name)}</title>`;
+    if(shape==="e") parts.push(`<ellipse ${attr} cx="${80+(dir||1)*x}" cy="${y}" rx="${a}" ry="${b}">${t}</ellipse>`);
+    else parts.push(`<rect ${attr} x="${dir===-1?80-x-a:80+x}" y="${y}" width="${a}" height="${b}" rx="5">${t}</rect>`); }
+  return `<div class="bodymap"><div class="chips"><button aria-pressed="${view==="front"}" data-action="bodyView" data-id="front">Front</button><button aria-pressed="${view==="back"}" data-action="bodyView" data-id="back">Back</button></div>
+  <svg viewBox="0 0 160 300" role="group" aria-label="Body diagram, ${view} view">${parts.join("")}
+  <text x="6" y="14" font-size="9" fill="var(--muted)">${view==="front"?"Right":"Left"}</text><text x="154" y="14" font-size="9" text-anchor="end" fill="var(--muted)">${view==="front"?"Left":"Right"}</text></svg>
+  <div class="muted">${w.site?"Selected: "+esc(w.site):"Tap the body area of the wound. Sides are the patient's left and right."}</div></div>`; }
+
+function tabDetails(c,w){ const n=c.wounds.indexOf(w)+1;
   return `<div class="card"><h2>Patient</h2><div class="grid">${inp("Patient name","case|name",c.name)}${inp("Patient ID number","case|idNo",c.idNo,"text",'inputmode="numeric"')}${inp("MyKit billing number","case|billing",c.billing)}</div></div>
   <div class="card"><h2>Medical aid</h2><div class="grid">${inp("Medical aid name","case|aid",c.aid)}${inp("Medical aid number","case|aidNo",c.aidNo)}${inp("Dependant code","case|dep",c.dep)}</div></div>
   <div class="card"><h2>Treatment</h2><div class="grid">${inp("Referring surgeon","case|refDr",c.refDr)}${inp("Practice number","case|practiceNo",c.practiceNo)}${inp("Start of treatment","case|startDate",c.startDate,"date")}
   <label class="f" for="f-freq">Frequency of visits<input id="f-freq" list="freqlist" data-bind="case|frequency" value="${esc(c.frequency)}"><datalist id="freqlist">${OPT.frequency.map(o=>`<option value="${esc(o)}">`).join("")}</datalist></label>
   ${inp("Next follow up visit","case|nextVisit",c.nextVisit,"date")}</div></div>
-  <div class="card"><h2>Wound</h2><div class="grid">${inp("Site","case|site",c.site,"text",'placeholder="Lower Leg"')}${inp("ICD-10 codes","case|icd",c.icd,"text",'placeholder="S87.0 W01.09 T81.0"')}
+  <div class="card"><h2>ICD-10 codes</h2><div class="muted">One list for the patient. Add the codes for every wound.</div><div class="grid">${inp("ICD-10 codes","case|icd",c.icd,"text",'placeholder="S87.0 W01.09 T81.0"')}
   <label class="f" for="icd-q">Search ICD-10 by keyword or code<input id="icd-q" type="search" autocomplete="off" placeholder="pressure ulcer, diabetic foot, L97"></label></div>
   <div class="actions"><button class="small" data-action="icdBrowse">Show my sheet codes</button></div>
   <div id="icd-res" class="list" style="gap:6px"></div><div id="icd-desc" class="muted"></div>
   <div class="muted">Code not in the list? Type your own. The app saves the code to your list for next time.</div>
   <div class="grid"><label class="f" for="icd-new-code">Your code<input id="icd-new-code" type="text" autocomplete="off" autocapitalize="characters" placeholder="W01.09"></label><label class="f" for="icd-new-desc">Description (optional)<input id="icd-new-desc" type="text" autocomplete="off" placeholder="Fall at home"></label></div>
-  <div class="actions"><button class="small" data-action="icdSave">Save and add to report</button></div>
-  <div class="muted">Wound description. Select all that apply.</div><div class="chips">${OPT.types.map(o=>`<button aria-pressed="${c.types.includes(o)}" data-action="type" data-id="${esc(o)}">${esc(o)}</button>`).join("")}</div>
-  <div class="muted">Healability</div><div class="chips">${OPT.healability.map(o=>`<button aria-pressed="${c.healability===o}" data-action="heal" data-id="${esc(o)}">${esc(o)}</button>`).join("")}</div></div>
-  <div class="card"><h2>History and motivation</h2>${area_(HISTORY_LABEL,"case|history",c.history,"Treatment history, treatment dates, complications, co-morbidities, request for authorisation")}
-  ${area_("Dressings","case|dressings",c.dressings,"Dressing tray, cleaning solution, primary and secondary dressings")}</div>
+  <div class="actions"><button class="small" data-action="icdSave">Save and add to report</button></div></div>
+  <div class="card" id="woundcard"><h2>Wounds</h2><div class="muted">Each wound has its own site, description, visits, photos and progress.</div>${woundBar(c,w)}
+  <h3>Wound ${n} site</h3><div class="grid">
+  <label class="f" for="w-region">Body area<select id="w-region" data-wsite="region"><option value="">Select</option>${SITES.map(o=>`<option${o===w.region?" selected":""}>${esc(o)}</option>`).join("")}</select></label>
+  <label class="f" for="w-side">Side<select id="w-side" data-wsite="side"><option value="">Not stated</option>${SIDES.map(o=>`<option${o===w.side?" selected":""}>${o}</option>`).join("")}</select></label>
+  ${inp("Site wording on the report","wound|site",w.site,"text",'placeholder="Left lower leg"')}</div>
+  <div class="actions"><button class="small" data-action="bodyMap">${ui.bodyMap?"Hide body diagram":"Choose on body diagram"}</button></div>${ui.bodyMap?bodyMap(w):""}
+  <div class="muted">Wound ${n} description. Select all that apply.</div><div class="chips">${OPT.types.map(o=>`<button aria-pressed="${w.types.includes(o)}" data-action="type" data-id="${esc(o)}">${esc(o)}</button>`).join("")}</div>
+  <div class="muted">Wound ${n} healability</div><div class="chips">${OPT.healability.map(o=>`<button aria-pressed="${w.healability===o}" data-action="heal" data-id="${esc(o)}">${esc(o)}</button>`).join("")}</div>
+  ${area_("Wound "+n+" dressings","wound|dressings",w.dressings,"Dressing tray, cleaning solution, primary and secondary dressings")}
+  ${c.wounds.length>1?`<div class="actions"><button class="small danger" data-action="delWound" data-confirm="1">Delete wound ${n}</button></div>`:""}</div>
+  <div class="card"><h2>History and motivation</h2>${area_(HISTORY_LABEL,"case|history",c.history,"Treatment history, treatment dates, complications, co-morbidities, request for authorisation")}</div>
   <div class="actions"><button class="primary" data-action="tab" data-id="visits">Go to visits</button><button class="danger" data-action="delCase" data-confirm="1">Delete patient</button></div>`;
 }
 
-function tabVisits(c){
+function tabVisits(pt,c){
   const vs=visitsAsc(c); const order=[...vs].reverse();
-  return `<div class="actions"><button class="primary" data-action="addVisit">Add visit</button></div>
+  return `<div class="actions"><button class="primary" data-action="addVisit">Add visit for wound ${pt.wounds.indexOf(c)+1}</button></div>
   <div class="list">${order.map(v=>{ const n=vs.indexOf(v)+1, open=ui.openVisit===v.id, a=area(v);
     return `<div class="card"><div class="vhead"><div class="grow"><strong>${esc(fmtDate(v.date)||"No date")}</strong><span class="muted">Visit ${n}${dimText(v)?" · "+esc(dimText(v)):""}${a?" · "+a+" cm²":""}${v.phase?" · "+esc(v.phase):""}</span></div>
     <button class="small" data-action="toggleVisit" data-id="${v.id}">${open?"Close":"Edit"}</button></div>
@@ -305,7 +341,7 @@ function chart(c){
   <text x="${L}" y="${H-10}" font-size="12" fill="var(--muted)">${esc(shortDate(pts[0].d))}</text><text x="${W-R}" y="${H-10}" text-anchor="end" font-size="12" fill="var(--muted)">${esc(shortDate(pts[pts.length-1].d))}</text></svg>`;
 }
 
-function tabProgress(c){
+function tabProgress(pt,c){
   const vs=visitsAsc(c); if(!vs.length) return '<div class="card"><p class="muted">Add a visit with a photo to start tracking.</p></div>';
   const withA=vs.filter(v=>area(v)!=null), first=withA[0], last=withA[withA.length-1], ch=change(c);
   const days=vs.length>1?Math.round((new Date(vs[vs.length-1].date)-new Date(vs[0].date))/864e5):0;
@@ -321,32 +357,33 @@ function tabProgress(c){
 }
 
 /* ---------- report model shared by the preview and the PDF ---------- */
-function visitDatesText(c){ const groups=[]; for(const v of visitsAsc(c)){ if(!v.date) continue; const [y,m,d]=v.date.split("-").map(Number); const key=MONTHS[m-1]+" "+y; let g=groups[groups.length-1]; if(!g||g.key!==key){ g={key,days:[]}; groups.push(g); } if(!g.days.includes(d)) g.days.push(d); } return groups.map(g=>g.days.join(", ")+" "+g.key).join("\n"); }
-function reportPhotos(c){ let vs=visitsAsc(c).filter(v=>v.photos.length); const m=c.reportPhotos||"last4"; if(m==="firstlast"&&vs.length>1) vs=[vs[0],vs[vs.length-1]]; else if(m==="last4") vs=vs.slice(-4); else if(m==="none") vs=[];
+function visitDatesText(c){ const groups=[]; for(const v of visitsAsc({visits:allVisits(c)})){ if(!v.date) continue; const [y,m,d]=v.date.split("-").map(Number); const key=MONTHS[m-1]+" "+y; let g=groups[groups.length-1]; if(!g||g.key!==key){ g={key,days:[]}; groups.push(g); } if(!g.days.includes(d)) g.days.push(d); } return groups.map(g=>g.days.join(", ")+" "+g.key).join("\n"); }
+function reportPhotos(c,w){ let vs=visitsAsc(w).filter(v=>v.photos.length); const m=c.reportPhotos||"last4"; if(m==="firstlast"&&vs.length>1) vs=[vs[0],vs[vs.length-1]]; else if(m==="last4") vs=vs.slice(-4); else if(m==="none") vs=[];
   const out=[]; for(const v of vs) for(const p of v.photos) out.push({pid:p,l1:"Photo "+(out.length+1)+": "+fmtDate(v.date,true),l2:dimText(v)?"Dimensions - "+dimText(v):""}); return out; }
-function model(c){ const last=visitsAsc(c).pop()||{}; const who=settings.practitioner, sister=settings.title==="Sr."?"Sister":settings.title;
-  return { icd:c.icd,
-    head:[["Patient Name",c.name],["MyKit Billing Number",c.billing],["Medical Aid Name",c.aid,"Medical aid Number",c.aidNo],["Patient ID Number",c.idNo,"Dep code",c.dep],["Treating practitioner",who,"Practise Number:",settings.practiceNo],["Referring Surgeon",c.refDr,"Practise Number:",c.practiceNo],["Start of Treatment",fmtDate(c.startDate,true)],["Site and picture",c.site]],
-    assess:ASSESS.map(([k,l])=>[l,last[k]||""]),
-    tail:[[HISTORY_LABEL,c.history],["Dressings",c.dressings],["Frequency of visits",c.frequency],["DATES/ Visits",visitDatesText(c)],["Next Follow up visit",c.nextVisit?"Date "+fmtDate(c.nextVisit):""]],
+function model(c){ const who=settings.practitioner, sister=settings.title==="Sr."?"Sister":settings.title, multi=c.wounds.length>1;
+  return { icd:c.icd, multi,
+    head:[["Patient Name",c.name],["MyKit Billing Number",c.billing],["Medical Aid Name",c.aid,"Medical aid Number",c.aidNo],["Patient ID Number",c.idNo,"Dep code",c.dep],["Treating practitioner",who,"Practise Number:",settings.practiceNo],["Referring Surgeon",c.refDr,"Practise Number:",c.practiceNo],["Start of Treatment",fmtDate(c.startDate,true)]].concat(multi?[["Number of wounds",String(c.wounds.length)]]:[]),
+    wounds:c.wounds.map((w,i)=>{ const last=visitsAsc(w).pop()||{}; return {w,title:"WOUND "+(i+1)+(w.site?": "+w.site:""),site:w.site,photos:reportPhotos(c,w),assess:ASSESS.map(([k,l])=>[l,last[k]||""])}; }),
+    tail:[[HISTORY_LABEL,c.history]].concat(multi?[]:[["Dressings",c.wounds[0].dressings]],[["Frequency of visits",c.frequency],["DATES/ Visits",visitDatesText(c)],["Next Follow up visit",c.nextVisit?"Date "+fmtDate(c.nextVisit):""]]),
     foot:[`Please e-mail auth no to ${settings.email} ASAP.`,`For further queries or questions please contact ${settings.title} ${who} on ${settings.phone}.`,"Please see the attached Photos of the wound/s.","Kind Regards",who],
     info:`This Report has been Prepared by ${who}.`,
     conf:`The information transmitted, including attachments, is intended only for the person(s) or entity to which it is addressed and may contain confidential and/or privileged material. Any review, re-transmission, dissemination or other use of, or taking of any action in reliance upon this information by persons or entities other than the intended recipient is prohibited. If you received this in error, please contact ${sister} ${who} and destroy any copies of this information.` };
 }
 function tabReport(c){
-  const m=model(c), ph=reportPhotos(c); const top=window.self===window.top;
+  const m=model(c); const top=window.self===window.top;
   const row=r=>r.length===4?`<tr><td class="l">${esc(r[0])}</td><td>${esc(r[1])}</td><td class="l">${esc(r[2])}</td><td>${esc(r[3])}</td></tr>`:`<tr><td class="l">${esc(r[0])}</td><td colspan="3">${esc(r[1])}</td></tr>`;
   const cks=(opts,on)=>opts.map(o=>`<span class="ck${on.includes(o)?" on":""}"><i></i>${esc(o)}</span>`).join("");
   const modes=[["last4","Last 4 visits with photos"],["firstlast","First and latest visit"],["all","All visits"],["none","No photos"]];
   return `<div class="card noprint"><div class="grid"><label class="f" for="f-rp">Photos on the report<select id="f-rp" data-bind="case|reportPhotos" data-rerender="1">${modes.map(([k,l])=>`<option value="${k}"${(c.reportPhotos||"last4")===k?" selected":""}>${l}</option>`).join("")}</select></label></div>
-  <div class="muted">The assessment rows use the latest visit. Check the preview, then save the PDF and email the file to the medical scheme.</div>
+  <div class="muted">The assessment rows use the latest visit of each wound. Check the preview, then save the PDF and email the file to the medical scheme.</div>
   <div class="actions"><button class="primary" data-action="pdf">Download PDF</button>${top?'<button data-action="print">Print</button>':""}</div></div>
   <div class="paperwrap"><div class="paper"><h2>WOUND MANAGEMENT REPORT</h2><div class="icd">${esc(m.icd)}</div><table>
   ${m.head.map(row).join("")}
-  ${ph.length?`<tr><td colspan="4"><div class="pgrid">${ph.map(p=>`<div><img data-pid="${p.pid}" alt="${esc(p.l1)}"><div>${esc(p.l1)}</div><div>${esc(p.l2)}</div></div>`).join("")}</div></td></tr>`:""}
-  ${m.assess.map(row).join("")}
-  <tr><td class="l">Wound description</td><td colspan="3" style="white-space:normal">${cks(OPT.types,c.types)}</td></tr>
-  <tr><td class="l">Healability</td><td colspan="3" style="white-space:normal">${cks(OPT.healability,[c.healability])}</td></tr>
+  ${m.wounds.map(x=>`${m.multi?`<tr><td class="wh" colspan="4">${esc(x.title)}</td></tr>`:""}${row(["Site and picture",x.site])}
+  ${x.photos.length?`<tr><td colspan="4"><div class="pgrid">${x.photos.map(p=>`<div><img data-pid="${p.pid}" alt="${esc(p.l1)}"><div>${esc(p.l1)}</div><div>${esc(p.l2)}</div></div>`).join("")}</div></td></tr>`:""}
+  ${x.assess.map(row).join("")}
+  <tr><td class="l">Wound description</td><td colspan="3" style="white-space:normal">${cks(OPT.types,x.w.types)}</td></tr>
+  <tr><td class="l">Healability</td><td colspan="3" style="white-space:normal">${cks(OPT.healability,[x.w.healability])}</td></tr>${m.multi?row(["Dressings",x.w.dressings]):""}`).join("")}
   ${m.tail.map(row).join("")}</table>
   ${m.foot.map(p=>`<p>${esc(p)}</p>`).join("")}
   <p><b>IMPORTANT INFORMATION</b></p><p>${esc(m.info)}</p><p><b>CONFIDENTIALITY NOTE</b></p><p class="small">${esc(m.conf)}</p></div></div>`;
@@ -377,14 +414,17 @@ async function buildPdf(c){
     doc.setFillColor(236,241,241); doc.rect(M,y,LW,h,"FD"); doc.rect(M+LW,y,W-LW,h); doc.text(lab,M+PAD,y+PAD+3.2);
     for(const it of items){ const sel=on.includes(it.o), bx=M+LW+PAD+it.x, by=y+PAD+it.line*LH2+0.4; doc.setFillColor(30,30,30); doc.rect(bx,by,3,3,sel?"FD":"S"); doc.setFont("helvetica",sel?"bold":"normal"); doc.text(it.o,bx+4.3,by+2.7); }
     y+=h; }
-  rows(m.head);
-  const ph=reportPhotos(c), CW=W/2, BW=CW-6, BH=58;
+  rows(m.head); const CW=W/2, BW=CW-6, BH=58;
+  for(const x of m.wounds){ const ph=x.photos;
+  if(m.multi){ if(y+30>BOT) page(); doc.setFillColor(213,226,226); doc.rect(M,y,W,7,"FD"); doc.setFont("helvetica","bold"); doc.setFontSize(10); doc.text(clean(x.title),105,y+4.8,{align:"center"}); y+=7; }
+  rows([["Site and picture",x.site]]);
   for(let i=0;i<ph.length;i+=2){ const hh=BH+15; if(y+hh>BOT) page();
     for(let j=0;j<2;j++){ const p=ph[i+j], x=M+j*CW; doc.rect(x,y,CW,hh); if(!p) continue; const img=await getPhoto(p.pid);
       if(img){ const s=Math.min(BW/img.w,BH/img.h), iw=img.w*s, ih=img.h*s; try{ doc.addImage(img.data,"JPEG",x+(CW-iw)/2,y+3+(BH-ih)/2,iw,ih,undefined,"FAST"); }catch(e){} }
       doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.text(clean(p.l1),x+3,y+BH+7.5); if(p.l2) doc.text(clean(p.l2),x+3,y+BH+12); }
     y+=hh; }
-  rows(m.assess); checks("Wound description",OPT.types,c.types); checks("Healability",OPT.healability,[c.healability]); rows(m.tail);
+  rows(x.assess); checks("Wound description",OPT.types,x.w.types); checks("Healability",OPT.healability,[x.w.healability]); if(m.multi) rows([["Dressings",x.w.dressings]]); }
+  rows(m.tail);
   function para(t,o={}){ doc.setFont("helvetica",o.b?"bold":"normal"); doc.setFontSize(o.s||10); const lh=(o.s||10)*0.3528*1.3; const ls=doc.splitTextToSize(clean(t),W);
     for(const l of ls){ if(y+lh>BOT+4) page(); y+=lh; doc.text(l,M,y); } y+=o.gap??2.5; }
   y+=4; m.foot.forEach((t,i)=>para(t,{gap:i===3?0.5:2.5}));
@@ -407,7 +447,7 @@ async function backup(){ const photos={}; for(const k of await store.keys("photo
   await saveFile("wound-report-backup-"+today()+".json",new Blob([JSON.stringify({app:"wound-report-tracker",version:1,settings,cases,photos})],{type:"application/json"})); }
 async function restore(file){ try{ const d=JSON.parse(await file.text()); if(d.app!=="wound-report-tracker") throw 0;
   for(const [k,p] of Object.entries(d.photos||{})) await store.set("photos",k,p);
-  for(const c of d.cases||[]){ const i=cases.findIndex(x=>x.id===c.id); if(i>=0) cases[i]=c; else cases.push(c); await store.set("cases",c.id,c); }
+  for(const c of d.cases||[]){ normalize(c); const i=cases.findIndex(x=>x.id===c.id); if(i>=0) cases[i]=c; else cases.push(c); await store.set("cases",c.id,c); }
   if(d.settings){ settings={...settings,...d.settings}; await store.set("meta","settings",settings); }
   toast("Backup restored: "+(d.cases||[]).length+" patients"); ui.view="home"; render(); }catch(e){ toast("This file is not a Wound Report Tracker backup"); } }
 
@@ -450,27 +490,34 @@ function icdSaveOwn(code,label){ const list=settings.customIcd=(settings.customI
 /* ---------- events ---------- */
 let icdT; document.addEventListener("input",e=>{ if(e.target.id==="icd-q"){ const q=e.target.value; clearTimeout(icdT); icdT=setTimeout(()=>icdRun(q),180); return; } if(e.target.id===fid("case|icd")){ clearTimeout(icdT); icdT=setTimeout(icdDescribe,400); } const b=e.target.dataset&&e.target.dataset.bind; if(!b) return; const [kind,a,k]=b.split("|"); const val=e.target.value;
   if(kind==="set"){ settings[a]=val; queueSettings(); return; } const c=cur(); if(!c) return;
-  if(kind==="case") c[a]=val; else { const v=c.visits.find(x=>x.id===a); if(v) v[k]=val; } queueSave(); if(e.target.dataset.rerender) render(); });
-document.addEventListener("change",async e=>{ const t=e.target; if(t.dataset.photo){ const c=cur(), v=c&&c.visits.find(x=>x.id===t.dataset.photo); if(!v) return; let n=0;
+  if(kind==="case") c[a]=val; else if(kind==="wound") curW()[a]=val; else { const v=curW().visits.find(x=>x.id===a); if(v) v[k]=val; } queueSave(); if(e.target.dataset.rerender) render(); });
+document.addEventListener("change",async e=>{ const t=e.target; if(t.dataset.wsite){ const c=cur(), w=curW(); if(!w) return; w[t.dataset.wsite]=t.value; w.site=siteText(w); saveCase(c); render(); return; }
+  if(t.dataset.photo){ const c=cur(), v=c&&curW().visits.find(x=>x.id===t.dataset.photo); if(!v) return; let n=0;
     for(const f of t.files){ try{ const p=await fileToPhoto(f), id=uid(); await store.set("photos",id,p); v.photos.push(id); n++; }catch(err){ toast("One file is not an image this browser reads"); } }
     if(n){ await saveCase(c); toast(n+" photo"+(n>1?"s":"")+" added"); } render(); }
   else if(t.dataset.restore&&t.files[0]) restore(t.files[0]); });
 const armed=new WeakMap();
-document.addEventListener("click",async e=>{ const el=e.target.closest("[data-action]"); if(!el) return; const act=el.dataset.action, id=el.dataset.id, c=cur();
+document.addEventListener("click",async e=>{ const el=e.target.closest("[data-action]"); if(!el) return; const act=el.dataset.action, id=el.dataset.id, c=cur(), w=curW();
   if(el.dataset.confirm&&!armed.get(el)){ armed.set(el,el.textContent); el.textContent="Tap again to confirm"; setTimeout(()=>{ if(el.isConnected&&armed.get(el)){ el.textContent=armed.get(el); armed.delete(el); } },3000); return; }
   switch(act){
     case "home": if(c) await saveCase(c); ui.view="home"; ui.caseId=null; break;
     case "settings": ui.view="settings"; break;
-    case "newCase": { const n=newCase(); cases.push(n); await saveCase(n); Object.assign(ui,{view:"case",caseId:n.id,tab:"details"}); break; }
-    case "openCase": Object.assign(ui,{view:"case",caseId:id,tab:"details",openVisit:null}); break;
+    case "newCase": { const n=newCase(); cases.push(n); await saveCase(n); Object.assign(ui,{view:"case",caseId:n.id,tab:"details",woundId:null,openVisit:null,bodyMap:false}); break; }
+    case "openCase": Object.assign(ui,{view:"case",caseId:id,tab:"details",openVisit:null,woundId:null,bodyMap:false}); break;
     case "tab": ui.tab=id; break;
-    case "type": c.types=c.types.includes(id)?c.types.filter(x=>x!==id):[...c.types,id]; saveCase(c); break;
-    case "heal": c.healability=c.healability===id?"":id; saveCase(c); break;
-    case "addVisit": { const v=newVisit(c); c.visits.push(v); ui.openVisit=v.id; saveCase(c); break; }
+    case "wound": ui.woundId=id; ui.openVisit=null; break;
+    case "addWound": { const nw=newWound(); c.wounds.push(nw); ui.woundId=nw.id; ui.openVisit=null; ui.tab="details"; ui.bodyMap=true; await saveCase(c); render(); const wc=$("#woundcard"); if(wc) wc.scrollIntoView(); toast("Wound "+c.wounds.length+" added. Choose the site."); return; }
+    case "delWound": { for(const v of w.visits) for(const p of v.photos) await store.del("photos",p); c.wounds=c.wounds.filter(x=>x!==w); ui.woundId=null; saveCase(c); toast("Wound deleted"); break; }
+    case "bodyMap": ui.bodyMap=!ui.bodyMap; break;
+    case "bodyView": ui.bodyView=id; break;
+    case "site": { const [region,side]=id.split("|"); w.region=region; w.side=side; w.site=siteText(w); saveCase(c); break; }
+    case "type": w.types=w.types.includes(id)?w.types.filter(x=>x!==id):[...w.types,id]; saveCase(c); break;
+    case "heal": w.healability=w.healability===id?"":id; saveCase(c); break;
+    case "addVisit": { const v=newVisit(w); w.visits.push(v); ui.openVisit=v.id; saveCase(c); break; }
     case "toggleVisit": ui.openVisit=ui.openVisit===id?null:id; saveCase(c); break;
-    case "delVisit": { const v=c.visits.find(x=>x.id===id); for(const p of v.photos) await store.del("photos",p); c.visits=c.visits.filter(x=>x.id!==id); saveCase(c); break; }
-    case "delPhoto": { const [vid,pid]=id.split("|"); const v=c.visits.find(x=>x.id===vid); v.photos=v.photos.filter(p=>p!==pid); await store.del("photos",pid); saveCase(c); break; }
-    case "delCase": for(const v of c.visits) for(const p of v.photos) await store.del("photos",p); await store.del("cases",c.id); cases=cases.filter(x=>x.id!==c.id); ui.view="home"; ui.caseId=null; toast("Patient deleted"); break;
+    case "delVisit": { const v=w.visits.find(x=>x.id===id); for(const p of v.photos) await store.del("photos",p); w.visits=w.visits.filter(x=>x.id!==id); saveCase(c); break; }
+    case "delPhoto": { const [vid,pid]=id.split("|"); const v=w.visits.find(x=>x.id===vid); v.photos=v.photos.filter(p=>p!==pid); await store.del("photos",pid); saveCase(c); break; }
+    case "delCase": for(const v of allVisits(c)) for(const p of v.photos) await store.del("photos",p); await store.del("cases",c.id); cases=cases.filter(x=>x.id!==c.id); ui.view="home"; ui.caseId=null; toast("Patient deleted"); break;
     case "icdAdd": toast(icdAddToCase(c,id)?id+" added":id+" is already on the report"); return;
     case "icdTyped": icdSaveOwn(id,""); icdAddToCase(c,id); toast(id+" added and saved to your list"); return;
     case "icdBrowse": icdRun("",true); return;
@@ -487,7 +534,7 @@ window.addEventListener("pagehide",()=>{ const c=cur(); if(c) saveCase(c); });
 
 (async function init(){
   const s=await store.get("meta","settings"); if(s) settings={...settings,...s};
-  cases=await store.all("cases")||[];
+  cases=(await store.all("cases")||[]).map(normalize);
   if(!cases.length && !(await store.get("meta","seeded"))) await seed();
   render();
   if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});

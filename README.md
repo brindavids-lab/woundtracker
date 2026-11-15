@@ -3,6 +3,8 @@
 A web app for wound management reports with photo tracking. It produces the report a medical scheme needs for authorisation, as a PDF.
 
 - Record patient, medical aid and wound details.
+- Record the wound site from a list or a body diagram, with the side of the body.
+- Track more than one wound per patient. Each wound has its own site, description, visits, photos and progress, and the report shows a section per wound.
 - Add visits with photos, dimensions and a wound assessment.
 - Follow wound area over time on a chart and a photo timeline.
 - Search ICD-10 codes by keyword or code and add them to the report.
