@@ -82,6 +82,8 @@ textarea{min-height:120px;resize:vertical}
 figcaption{font-size:.82rem;color:var(--muted)}
 figcaption b{color:var(--ink);display:block}
 svg text{font-family:var(--body)}
+.icdrow{justify-content:flex-start;text-align:left;gap:10px;min-height:40px;padding:8px 10px;font-weight:400;width:100%}
+.icdrow b{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--accent)}
 .notice{border:1px solid var(--warn);color:var(--warn);border-radius:10px;padding:10px 12px;font-size:.9rem}
 .actions{display:flex;gap:8px;flex-wrap:wrap}
 .paperwrap{overflow-x:auto}
@@ -210,7 +212,7 @@ function area_(label,bind,value,ph=""){ return `<label class="f" for="${fid(bind
 function render(){
   const app=$("#app"); const c=cur();
   if(ui.view==="case"&&c) app.innerHTML=viewCase(c); else if(ui.view==="settings") app.innerHTML=viewSettings(); else { ui.view="home"; app.innerHTML=viewHome(); }
-  hydrate();
+  hydrate(); if($("#icd-desc")) icdDescribe();
 }
 async function hydrate(){ for(const img of document.querySelectorAll("img[data-pid]")){ if(img.getAttribute("src")) continue; const p=await getPhoto(img.dataset.pid); if(p) img.src=p.data; } }
 const storageNote = () => store.ok?"":`<div class="notice">This browser is not saving data. Download a backup from Settings before you close this page.</div>`;
@@ -253,7 +255,9 @@ function tabDetails(c){
   <div class="card"><h2>Treatment</h2><div class="grid">${inp("Referring surgeon","case|refDr",c.refDr)}${inp("Practice number","case|practiceNo",c.practiceNo)}${inp("Start of treatment","case|startDate",c.startDate,"date")}
   <label class="f" for="f-freq">Frequency of visits<input id="f-freq" list="freqlist" data-bind="case|frequency" value="${esc(c.frequency)}"><datalist id="freqlist">${OPT.frequency.map(o=>`<option value="${esc(o)}">`).join("")}</datalist></label>
   ${inp("Next follow up visit","case|nextVisit",c.nextVisit,"date")}</div></div>
-  <div class="card"><h2>Wound</h2><div class="grid">${inp("Site","case|site",c.site,"text",'placeholder="Lower Leg"')}${inp("ICD-10 codes","case|icd",c.icd,"text",'placeholder="S87.0 W01.09 T81.0"')}</div>
+  <div class="card"><h2>Wound</h2><div class="grid">${inp("Site","case|site",c.site,"text",'placeholder="Lower Leg"')}${inp("ICD-10 codes","case|icd",c.icd,"text",'placeholder="S87.0 W01.09 T81.0"')}
+  <label class="f" for="icd-q">Search ICD-10 by keyword or code<input id="icd-q" type="search" autocomplete="off" placeholder="pressure ulcer, diabetic foot, L97"></label></div>
+  <div id="icd-res" class="list" style="gap:6px"></div><div id="icd-desc" class="muted"></div>
   <div class="muted">Wound description. Select all that apply.</div><div class="chips">${OPT.types.map(o=>`<button aria-pressed="${c.types.includes(o)}" data-action="type" data-id="${esc(o)}">${esc(o)}</button>`).join("")}</div>
   <div class="muted">Healability</div><div class="chips">${OPT.healability.map(o=>`<button aria-pressed="${c.healability===o}" data-action="heal" data-id="${esc(o)}">${esc(o)}</button>`).join("")}</div></div>
   <div class="card"><h2>History and motivation</h2>${area_(HISTORY_LABEL,"case|history",c.history,"Treatment history, treatment dates, complications, co-morbidities, request for authorisation")}
@@ -400,8 +404,26 @@ async function restore(file){ try{ const d=JSON.parse(await file.text()); if(d.a
   if(d.settings){ settings={...settings,...d.settings}; await store.set("meta","settings",settings); }
   toast("Backup restored: "+(d.cases||[]).length+" patients"); ui.view="home"; render(); }catch(e){ toast("This file is not a Wound Report Tracker backup"); } }
 
+/* ---------- ICD-10 search (code list bundled with the app, loaded on first use) ---------- */
+let icdP=null, icdMap=null, icdIdx=null;
+function icdLoad(){ if(!icdP) icdP=new Promise(res=>{ const done=()=>{ if(window.ICD10){ icdMap=new Map(window.ICD10); icdIdx=window.ICD10.map(([code,d])=>{ const par=code.length>3?icdMap.get(code.slice(0,3))||"":""; return {code,d,par,t:(code+" "+d+" "+par).toLowerCase()}; }); } res(!!icdIdx); };
+  if(window.ICD10) return done(); const sc=document.createElement("script"); sc.src="icd10.js"; sc.onload=done; sc.onerror=()=>{ icdP=null; res(false); }; document.head.appendChild(sc); }); return icdP; }
+const ICD_SYN={diabetic:["diabet"],diabetes:["diabet"],dehiscence:["disruption of operation"],dehisced:["disruption of operation"],bedsore:["decubitus"],bedsores:["decubitus"],sore:["decubitus","ulcer"],venous:["venous","varicose"],leg:["leg","lower limb"],surgical:["surgical","operation","procedure"],postoperative:["operation","procedure","postprocedural"],"post-operative":["operation","procedure","postprocedural"],infected:["infect"],infection:["infect"],burns:["burn"],ulcers:["ulcer"],wounds:["wound"],arterial:["arter","atheroscl"],amputation:["amputat"],graft:["graft","transplant"],laceration:["open wound"],lacerations:["open wound"],tear:["open wound"]};
+/* everyday wound terms that the official titles do not use */
+const ICD_ALIAS=[[/diabetic (foot|ulcer|wound|gangrene)/,["E10.5","E11.5","E14.5"]],[/arterial (ulcer|wound)|ischaemic ulcer|ischemic ulcer/,["I70.2","I73.9"]],[/venous (leg )?ulcer|stasis ulcer/,["I83.0","I83.2","I87.2"]],[/leg ulcer/,["L97"]],[/pressure (injury|sore)|bed ?sore/,["L89","L89.0","L89.1","L89.2","L89.3","L89.9"]],[/(wound|surgical site|post ?op\w*) infect|infected (wound|surgical)|\bssi\b|sepsis wound/,["T81.4"]],[/dehisc|wound breakdown|burst abdomen/,["T81.3"]],[/dressing|suture removal/,["Z48.0"]],[/masd|moisture|incontinence (associated )?dermatitis/,["L24","L22","L30.4"]],[/skin graft/,["Z94.5","T86.8"]],[/stump/,["T87.4","T87.5","T87.6"]],[/fungating|malignant wound/,["C44","C79.2"]]];
+function icdSearch(q){ const toks=q.toLowerCase().replace(/skin tears?|lacerations?/g,"open wound").split(/[^a-z0-9.\-]+/).filter(Boolean); if(!toks.length) return []; const codeQ=/^[a-z]\d/.test(toks[0])?toks[0].toUpperCase():"";
+  const first=[]; for(const [re,codes] of ICD_ALIAS) if(re.test(q.toLowerCase())) for(const k of codes){ const r=icdIdx.find(x=>x.code===k); if(r&&!first.includes(r)) first.push(r); }
+  const hits=[]; for(const r of icdIdx){ if(first.includes(r)) continue; let ok=true; for(const t of toks){ const alts=ICD_SYN[t]||[t]; if(!alts.some(a=>r.t.includes(a))){ ok=false; break; } } if(!ok) continue;
+    const sc=(codeQ&&r.code.startsWith(codeQ)?0:1000)+(toks.every(t=>(ICD_SYN[t]||[t]).some(a=>r.d.toLowerCase().includes(a)))?0:300)+(codeQ&&r.code.startsWith(codeQ)?0:Math.min(r.d.length,200)); hits.push([sc,r]); }
+  return first.concat(hits.sort((a,b)=>a[0]-b[0]||a[1].code.localeCompare(b[1].code)).map(h=>h[1])).slice(0,40); }
+async function icdRun(q){ const box=$("#icd-res"); if(!box) return; if(q.trim().length<2){ box.innerHTML=""; return; } if(!icdIdx){ box.innerHTML='<div class="muted">Loading the code list</div>'; if(!(await icdLoad())){ box.innerHTML='<div class="notice">The code list did not load. Reload the page and try again.</div>'; return; } }
+  const el=$("#icd-q"); if(!el||el.value!==q) return; const res=icdSearch(q);
+  box.innerHTML=res.length?res.map(r=>`<button class="icdrow" data-action="icdAdd" data-id="${esc(r.code)}"><b>${esc(r.code)}</b><span>${esc(r.d)}${r.par&&r.par!==r.d?`<span class="muted"> · ${esc(r.par)}</span>`:""}</span></button>`).join("")+'<div class="muted">Tap a code to add. ICD-10 WHO 2019 list. Check each code against the South African ICD-10 Master Industry Table before you submit.</div>':'<div class="muted">No codes match. Try a different word, for example ulcer, decubitus, gangrene, burn or cellulitis.</div>'; }
+async function icdDescribe(){ const c=cur(), box=$("#icd-desc"); if(!c||!box) return; const codes=(c.icd||"").toUpperCase().split(/[\s,;]+/).filter(Boolean); if(!codes.length){ box.innerHTML=""; return; } if(!(await icdLoad()))return; const b2=$("#icd-desc"); if(!b2) return;
+  b2.innerHTML=codes.map(k=>{ let p=k; while(p.length>=3&&!icdMap.has(p)) p=p.slice(0,-1).replace(/\.$/,""); const d=icdMap.get(p); return `<div><b>${esc(k)}</b> ${d?(p===k?"":"closest match "+esc(p)+": ")+esc(d):"not in the WHO list. Check this code."}</div>`; }).join(""); }
+
 /* ---------- events ---------- */
-document.addEventListener("input",e=>{ const b=e.target.dataset&&e.target.dataset.bind; if(!b) return; const [kind,a,k]=b.split("|"); const val=e.target.value;
+let icdT; document.addEventListener("input",e=>{ if(e.target.id==="icd-q"){ const q=e.target.value; clearTimeout(icdT); icdT=setTimeout(()=>icdRun(q),180); return; } if(e.target.id===fid("case|icd")){ clearTimeout(icdT); icdT=setTimeout(icdDescribe,400); } const b=e.target.dataset&&e.target.dataset.bind; if(!b) return; const [kind,a,k]=b.split("|"); const val=e.target.value;
   if(kind==="set"){ settings[a]=val; queueSettings(); return; } const c=cur(); if(!c) return;
   if(kind==="case") c[a]=val; else { const v=c.visits.find(x=>x.id===a); if(v) v[k]=val; } queueSave(); if(e.target.dataset.rerender) render(); });
 document.addEventListener("change",async e=>{ const t=e.target; if(t.dataset.photo){ const c=cur(), v=c&&c.visits.find(x=>x.id===t.dataset.photo); if(!v) return; let n=0;
@@ -424,6 +446,7 @@ document.addEventListener("click",async e=>{ const el=e.target.closest("[data-ac
     case "delVisit": { const v=c.visits.find(x=>x.id===id); for(const p of v.photos) await store.del("photos",p); c.visits=c.visits.filter(x=>x.id!==id); saveCase(c); break; }
     case "delPhoto": { const [vid,pid]=id.split("|"); const v=c.visits.find(x=>x.id===vid); v.photos=v.photos.filter(p=>p!==pid); await store.del("photos",pid); saveCase(c); break; }
     case "delCase": for(const v of c.visits) for(const p of v.photos) await store.del("photos",p); await store.del("cases",c.id); cases=cases.filter(x=>x.id!==c.id); ui.view="home"; ui.caseId=null; toast("Patient deleted"); break;
+    case "icdAdd": { const codes=(c.icd||"").split(/[\s,;]+/).filter(Boolean); if(codes.includes(id)){ toast(id+" is already on the report"); return; } codes.push(id); c.icd=codes.join(" "); saveCase(c); const f=$("#"+fid("case|icd")); if(f) f.value=c.icd; icdDescribe(); toast(id+" added"); return; }
     case "zoom": { const p=await getPhoto(id); if(p){ $("#lightimg").src=p.data; $("#lightbox").showModal(); } return; }
     case "pdf": { if(!window.jspdf){ toast("The PDF library did not load. Check your connection and reload."); return; } toast("Building the PDF"); try{ const blob=await buildPdf(c); await saveFile("Wound report "+(c.name||"patient").replace(/[^\w ]+/g,"").trim()+" "+today()+".pdf",blob); }catch(err){ toast("The PDF did not build: "+(err.message||err)); } return; }
     case "print": window.print(); return;

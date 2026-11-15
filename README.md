@@ -5,6 +5,7 @@ A web app for wound management reports with photo tracking. It produces the repo
 - Record patient, medical aid and wound details.
 - Add visits with photos, dimensions and a wound assessment.
 - Follow wound area over time on a chart and a photo timeline.
+- Search ICD-10 codes by keyword or code and add them to the report.
 - Download the report as a PDF.
 
 ## Privacy
@@ -46,6 +47,7 @@ After changing any file, raise `VERSION` in `sw.js` (wrt-v2, wrt-v3) so installe
 ## Files
 
 - `index.html`: the whole app
+- `icd10.js`: ICD-10 codes and titles, WHO 2019 version, used by the code search
 - `jspdf.umd.min.js`: jsPDF 2.5.1 (MIT licence), bundled for offline PDF export
 - `manifest.webmanifest`, `icons/`, `sw.js`: install and offline support
 
@@ -54,6 +56,14 @@ After changing any file, raise `VERSION` in `sw.js` (wrt-v2, wrt-v3) so installe
 The design follows the wound bed preparation paradigm described in this Delphi consensus:
 
 Smart H, Sibbald RG, Goodman L, Ayello EA, Jaimangal R, Gregory JH, et al. Wound Bed Preparation 2024: Delphi Consensus on Foot Ulcer Management in Resource-Limited Settings. Advances in Skin & Wound Care. 2024;37(4):180-196. PMID 38354304. https://doi.org/10.1097/ASW.0000000000000120
+
+## ICD-10 codes
+
+The code search uses the ICD-10 WHO 2019 list of three and four character codes, bundled in `icd10.js` so the search works offline and sends nothing out.
+
+- South African medical schemes follow the ICD-10 Master Industry Table (MIT) from the National Department of Health. The MIT builds on WHO ICD-10 and adds local rules, for example extra characters on external cause codes such as W01.09. Check every code against the current MIT before you submit.
+- The US ICD-10-CM code set is a different system and is not used here.
+- ICD-10 is copyright of the World Health Organization. The code list is not covered by the MIT licence of this app.
 
 ## Licence
 
