@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wound Report Tracker</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b6b6f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Wound Reports">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Layout idea: phone-first single column, one case at a time, four tabs that follow the clinic workflow. */
+  --bg:#f2f6f6; --surface:#ffffff; --ink:#12262b; --muted:#566b70; --line:#d3dedf;
+  --accent:#0b6b6f; --accent-ink:#ffffff; --accent-soft:#dcefee;
+  --good:#1c7548; --warn:#96560a; --bad:#b0362e;
+  --display:"Sora","Segoe UI",system-ui,sans-serif;
+  --body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0d1718; --surface:#152224; --ink:#e5eeee; --muted:#94a9ac; --line:#2a3c3f;
+    --accent:#4fbfbc; --accent-ink:#062120; --accent-soft:#17373a;
+    --good:#62cf97; --warn:#e4aa55; --bad:#ef8b81; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0d1718; --surface:#152224; --ink:#e5eeee; --muted:#94a9ac; --line:#2a3c3f;
+  --accent:#4fbfbc; --accent-ink:#062120; --accent-soft:#17373a;
+  --good:#62cf97; --warn:#e4aa55; --bad:#ef8b81; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45}
+#app{max-width:860px;margin:0 auto;padding:16px 16px 80px;display:flex;flex-direction:column;gap:16px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance}
+h1{font-size:1.45rem} h2{font-size:1.1rem} h3{font-size:.95rem}
+.muted{color:var(--muted);font-size:.875rem}
+.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.top .grow{flex:1;min-width:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px}
+button,.btn{font:inherit;font-weight:500;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:9px;padding:10px 14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;text-decoration:none}
+button.primary,.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.danger{color:var(--bad)}
+button.small,.btn.small{min-height:36px;padding:6px 10px;font-size:.875rem}
+button:focus-visible,.btn:focus-within,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px}
+.tabs button{border:0;background:transparent;padding:8px 4px;font-size:.9rem;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--accent-soft);color:var(--ink);font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.grid.three{grid-template-columns:repeat(3,1fr)}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:.85rem;color:var(--muted);font-weight:500}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;width:100%;min-height:44px}
+textarea{min-height:120px;resize:vertical}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips button{border-radius:999px;min-height:38px;padding:6px 12px;font-size:.9rem}
+.chips button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.list{display:flex;flex-direction:column;gap:12px}
+.caserow{display:flex;gap:12px;align-items:center;text-align:left;width:100%;padding:14px;border-radius:12px}
+.caserow .grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.pill{display:inline-flex;align-items:center;border-radius:999px;padding:2px 10px;font-size:.8rem;font-weight:600;border:1px solid currentColor;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pill.good{color:var(--good)} .pill.warn{color:var(--warn)} .pill.bad{color:var(--bad)} .pill.flat{color:var(--muted)}
+.tag{font-size:.72rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--warn);border:1px dashed var(--warn);border-radius:6px;padding:1px 6px}
+.vhead{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.vhead .grow{flex:1;min-width:0;display:flex;flex-direction:column}
+.thumbs{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start}
+.thumb{position:relative;width:96px;height:96px;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--bg);padding:0;min-height:0}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumbwrap{display:flex;flex-direction:column;gap:4px;align-items:center}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:2px}
+.tile b{font-family:var(--display);font-size:1.35rem;font-variant-numeric:tabular-nums}
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.compare figure,.timeline figure{margin:0;display:flex;flex-direction:column;gap:6px}
+.compare img,.timeline img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;border:1px solid var(--line);background:var(--bg);display:block;cursor:zoom-in}
+.timeline{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+figcaption{font-size:.82rem;color:var(--muted)}
+figcaption b{color:var(--ink);display:block}
+svg text{font-family:var(--body)}
+.notice{border:1px solid var(--warn);color:var(--warn);border-radius:10px;padding:10px 12px;font-size:.9rem}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.paperwrap{overflow-x:auto}
+.paper{background:#fff;color:#111;border:1px solid #c9c9c9;padding:24px;min-width:560px;font-size:13px;line-height:1.4;font-family:Arial,Helvetica,sans-serif}
+.paper h2{font-family:Arial,Helvetica,sans-serif;text-align:center;font-size:18px;color:#111}
+.paper .icd{text-align:center;margin:6px 0 12px}
+.paper table{width:100%;border-collapse:collapse;table-layout:fixed}
+.paper td{border:1px solid #777;padding:5px 7px;vertical-align:top;word-wrap:break-word;white-space:pre-wrap}
+.paper td.l{background:#eef2f2;font-weight:bold;width:28%}
+.paper .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;white-space:normal}
+.paper .pgrid img{width:100%;max-height:260px;object-fit:contain;display:block;background:#f4f4f4}
+.paper .ck{display:inline-flex;align-items:center;gap:5px;margin:0 12px 3px 0;white-space:nowrap}
+.paper .ck i{width:11px;height:11px;border:1px solid #222;display:inline-block}
+.paper .ck.on{font-weight:bold} .paper .ck.on i{background:#222}
+.paper p{margin:10px 0 0} .paper .small{font-size:11px}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:.9rem;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center}
+#toast.show{opacity:1}
+dialog{border:0;padding:0;background:transparent;max-width:96vw;max-height:96vh}
+dialog::backdrop{background:rgba(0,0,0,.8)}
+dialog img{max-width:96vw;max-height:86vh;display:block;border-radius:8px}
+dialog form{display:flex;justify-content:center;padding-top:8px}
+input[type=file]{position:absolute;width:1px;height:1px;opacity:0;min-height:0;padding:0}
+@media (max-width:420px){.grid.three{grid-template-columns:1fr 1fr 1fr}.tabs button{font-size:.8rem}}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}}
+@media print{
+  body{background:#fff}
+  .noprint{display:none!important}
+  #app{max-width:none;padding:0}
+  .paper{border:0;padding:0;min-width:0}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<dialog id="lightbox"><img alt="Wound photo enlarged" id="lightimg"><form method="dialog"><button>Close</button></form></dialog>
+<script src="jspdf.umd.min.js"></script>
+<script>
+"use strict";
+/* ---------- options taken from the report template ---------- */
+const OPT = {
+  bed:["Granulating","Epithelialising","Sloughy","Necrotic","Hypergranulating","Mixed","Exposed bone / tendon"],
+  exType:["None","Serous (clear thin watery)","Serosanguineous (pink watery)","Sanguineous (bloody)","Seropurulent","Purulent"],
+  exLevel:["None","Low","Moderate","High"],
+  edges:["Healthy / Intact","Macerated","Rolled (epibole)","Undermined","Callused","Erythematous"],
+  phase:["Haemostasis","Inflammatory","Proliferative","Maturation"],
+  infection:["None","Local infection","Spreading infection","Systemic infection","Biofilm suspected"],
+  painSev:["0","1-3","4-6","7-10"],
+  painFreq:["None","Only at dressing change","Intermittent","Constant"],
+  debridement:["None","Autolytic","Sharp","Mechanical","Enzymatic","Surgical","Biological"],
+  types:["Diabetic ulcer","Pressure Injury","Post surgical wound","Leg ulcer","Venous (CEAP)","Arterial","Cancer","Burns (rule of 9)","Dermatological condition","Mixed","Moisture associated skin damage (MASD)"],
+  healability:["Healable wound","Maintenance Wound","Non-Healable / Palliative Wound"],
+  frequency:["Daily","3 x Weekly","2 x Weekly","Weekly","Every 2 weeks"]
+};
+const ASSESS = [["bed","Wound Bed"],["exType","Type of Exudate"],["exLevel","Levels of Exudate"],["edges","Edges"],["phase","Wound Healing Phase"],["infection","Infection"],["painSev","Pain severity"],["painFreq","Pain Frequency"],["debridement","Debridement"]];
+const HISTORY_LABEL = "History of previous advanced or conservative wound treatment and current treatment:";
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+/* ---------- helpers ---------- */
+const $ = (s,r=document)=>r.querySelector(s);
+const esc = s => String(s??"").replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const today = () => { const d=new Date(); return new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
+const ord = n => n+(n%100>=11&&n%100<=13?"th":["th","st","nd","rd"][n%10]||"th");
+function fmtDate(iso, ordinal){ if(!iso) return ""; const [y,m,d]=iso.split("-").map(Number); if(!y||!m||!d) return iso; return (ordinal?ord(d):d)+" "+MONTHS[m-1]+" "+y; }
+function shortDate(iso){ if(!iso) return ""; const [y,m,d]=iso.split("-").map(Number); return d+" "+MONTHS[m-1].slice(0,3)+" "+y; }
+const num = v => { const n=parseFloat(v); return isFinite(n)&&n>0?n:null; };
+const area = v => { const l=num(v.l), w=num(v.w); return l&&w ? Math.round(l*w*10)/10 : null; };
+function dimText(v){ const p=[v.l,v.w,v.d].filter(x=>x!==""&&x!=null).map(x=>x+"cm"); return p.join(" x "); }
+const visitsAsc = c => [...c.visits].sort((a,b)=>(a.date||"").localeCompare(b.date||"")||a.id.localeCompare(b.id));
+function change(c){ const pts=visitsAsc(c).map(area).filter(a=>a!=null); if(pts.length<2) return null; return Math.round((pts[pts.length-1]-pts[0])/pts[0]*100); }
+function changePill(c){ const ch=change(c); if(ch==null) return '<span class="pill flat">No trend yet</span>'; const cls=ch<0?"good":ch>0?"bad":"flat"; return `<span class="pill ${cls}">${ch<0?"Area down ":ch>0?"Area up ":"Area unchanged "}${ch===0?"":Math.abs(ch)+"%"}</span>`; }
+let toastT; function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),3200); }
+
+/* ---------- storage: IndexedDB on this device, memory if the browser refuses ---------- */
+const store = (()=>{
+  const mem={cases:new Map(),photos:new Map(),meta:new Map()}; let dbp=null; const api={ok:true};
+  function open(){ if(dbp) return dbp; dbp=new Promise((res,rej)=>{ try{ const r=indexedDB.open("woundReportTracker",1);
+    r.onupgradeneeded=()=>{ for(const s of Object.keys(mem)) r.result.createObjectStore(s); };
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); r.onblocked=()=>rej(new Error("blocked")); }catch(e){rej(e);} });
+    return dbp; }
+  async function tx(s,mode,fn){ const db=await open(); return new Promise((res,rej)=>{ const t=db.transaction(s,mode); const rq=fn(t.objectStore(s)); t.oncomplete=()=>res(rq&&rq.result); t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error); }); }
+  async function guard(run,fallback){ if(api.ok){ try{ return await run(); }catch(e){ api.ok=false; } } return fallback(); }
+  api.get=(s,k)=>guard(()=>tx(s,"readonly",o=>o.get(k)),()=>mem[s].get(k));
+  api.set=(s,k,v)=>{ mem[s].set(k,v); return guard(()=>tx(s,"readwrite",o=>o.put(v,k)),()=>{}); };
+  api.del=(s,k)=>{ mem[s].delete(k); return guard(()=>tx(s,"readwrite",o=>o.delete(k)),()=>{}); };
+  api.all=s=>guard(()=>tx(s,"readonly",o=>o.getAll()),()=>[...mem[s].values()]);
+  api.keys=s=>guard(()=>tx(s,"readonly",o=>o.getAllKeys()),()=>[...mem[s].keys()]);
+  return api;
+})();
+
+/* ---------- state ---------- */
+let cases=[]; let settings={practitioner:"",title:"Sr.",practiceNo:"",email:"",phone:""};
+const ui={view:"home",caseId:null,tab:"details",openVisit:null};
+const cur = () => cases.find(c=>c.id===ui.caseId);
+let saveT; function queueSave(){ const c=cur(); if(!c) return; clearTimeout(saveT); saveT=setTimeout(()=>saveCase(c),300); }
+function saveCase(c){ c.updated=Date.now(); return store.set("cases",c.id,JSON.parse(JSON.stringify(c))); }
+let setT; function queueSettings(){ clearTimeout(setT); setT=setTimeout(()=>store.set("meta","settings",settings),300); }
+const photoCache=new Map();
+async function getPhoto(id){ if(photoCache.has(id)) return photoCache.get(id); const p=await store.get("photos",id); if(p){ if(photoCache.size>40) photoCache.delete(photoCache.keys().next().value); photoCache.set(id,p); } return p; }
+function newCase(){ return {id:uid(),name:"",billing:"",aid:"",aidNo:"",idNo:"",dep:"",refDr:"",practiceNo:"",startDate:today(),site:"",icd:"",types:[],healability:"",history:"",dressings:"",frequency:"",nextVisit:"",reportPhotos:"last4",visits:[]}; }
+function newVisit(c){ const last=visitsAsc(c).pop()||{}; const v={id:uid(),date:today(),l:"",w:"",d:"",note:"",photos:[]}; for(const [k] of ASSESS) v[k]=last[k]||""; return v; }
+
+/* ---------- example case (fictional, drawn images) ---------- */
+function drawExample(l,w,label){ const cv=document.createElement("canvas"); cv.width=800; cv.height=600; const g=cv.getContext("2d");
+  g.fillStyle="#d9c2b0"; g.fillRect(0,0,800,600); g.fillStyle="#b9463f"; g.beginPath(); g.ellipse(400,300,l*32,w*32,0,0,Math.PI*2); g.fill();
+  g.strokeStyle="#7d2a26"; g.lineWidth=6; g.stroke(); g.fillStyle="#fff"; g.fillRect(40,520,320,40); g.fillStyle="#111";
+  for(let i=0;i<=10;i++) g.fillRect(40+i*32,520,2,i%5?14:24); g.font="600 22px sans-serif"; g.fillText("EXAMPLE IMAGE  "+label,40,50);
+  return {data:cv.toDataURL("image/jpeg",0.8),w:800,h:600}; }
+async function seed(){
+  const c=newCase(); Object.assign(c,{example:true,name:"Example Patient",billing:"EX-0001",aid:"Example Medical Scheme",aidNo:"000000000",idNo:"0000000000000",dep:"00",refDr:"Dr Example",practiceNo:"0000000",startDate:"2026-09-01",site:"Lower Leg",icd:"L97 Z48.0",types:["Leg ulcer","Post surgical wound"],healability:"Healable wound",
+    history:"This is an example case. Replace this text with the treatment history, complications, co-morbidities and your request for authorisation.",dressings:"Dressing tray, cleaning solution, antimicrobial dressing, padding.",frequency:"2 x Weekly",nextVisit:"2026-10-02"});
+  const rows=[["2026-09-01",8,6,1,"Inflammatory","Moderate"],["2026-09-08",7.5,5.5,0.8,"Inflammatory","Moderate"],["2026-09-18",6,4.5,0.5,"Proliferative","Low"],["2026-09-29",4.5,3,0.3,"Proliferative","Low"]];
+  for(const [date,l,w,d,phase,lvl] of rows){ const pid=uid(); await store.set("photos",pid,drawExample(l,w,shortDate(date)));
+    c.visits.push({id:uid(),date,l:String(l),w:String(w),d:String(d),note:"",photos:[pid],bed:"Granulating",exType:"Serous (clear thin watery)",exLevel:lvl,edges:"Healthy / Intact",phase,infection:"None",painSev:"1-3",painFreq:"Only at dressing change",debridement:"Autolytic"}); }
+  cases.push(c); await saveCase(c); await store.set("meta","seeded",true);
+}
+
+/* ---------- form builders ---------- */
+const fid = b => "f-"+b.replace(/[^a-z0-9]+/gi,"-");
+function inp(label,bind,value,type="text",extra=""){ return `<label class="f" for="${fid(bind)}">${esc(label)}<input id="${fid(bind)}" type="${type}" data-bind="${bind}" value="${esc(value)}" ${extra}></label>`; }
+function sel(label,bind,value,options){ const o=options.includes(value)||!value?options:[value,...options]; return `<label class="f" for="${fid(bind)}">${esc(label)}<select id="${fid(bind)}" data-bind="${bind}"><option value="">Select</option>${o.map(x=>`<option${x===value?" selected":""}>${esc(x)}</option>`).join("")}</select></label>`; }
+function area_(label,bind,value,ph=""){ return `<label class="f" for="${fid(bind)}">${esc(label)}<textarea id="${fid(bind)}" data-bind="${bind}" placeholder="${esc(ph)}">${esc(value)}</textarea></label>`; }
+
+/* ---------- views ---------- */
+function render(){
+  const app=$("#app"); const c=cur();
+  if(ui.view==="case"&&c) app.innerHTML=viewCase(c); else if(ui.view==="settings") app.innerHTML=viewSettings(); else { ui.view="home"; app.innerHTML=viewHome(); }
+  hydrate();
+}
+async function hydrate(){ for(const img of document.querySelectorAll("img[data-pid]")){ if(img.getAttribute("src")) continue; const p=await getPhoto(img.dataset.pid); if(p) img.src=p.data; } }
+const storageNote = () => store.ok?"":`<div class="notice">This browser is not saving data. Download a backup from Settings before you close this page.</div>`;
+
+function viewHome(){
+  const list=[...cases].sort((a,b)=>(b.updated||0)-(a.updated||0));
+  return `<div class="top"><div class="grow"><h1>Wound Report Tracker</h1><div class="muted">Wound management reports for medical scheme authorisation</div></div>
+  <button data-action="settings">Settings</button><button class="primary" data-action="newCase">New patient</button></div>${storageNote()}
+  <div class="list">${list.map(c=>{ const vs=visitsAsc(c), last=vs[vs.length-1], pid=last&&last.photos[0];
+    return `<button class="caserow" data-action="openCase" data-id="${c.id}">${pid?`<span class="thumb" style="width:64px;height:64px;flex:none"><img data-pid="${pid}" alt=""></span>`:""}
+    <span class="grow"><strong>${esc(c.name||"Unnamed patient")} ${c.example?'<span class="tag">Example</span>':""}</strong>
+    <span class="muted">${esc([c.site,c.aid].filter(Boolean).join(" · ")||"No details yet")}</span>
+    <span class="muted">${vs.length} visit${vs.length===1?"":"s"}${last?" · last "+shortDate(last.date):""}</span></span>${changePill(c)}</button>`; }).join("")||'<div class="card"><p class="muted">No patients yet. Press New patient to start a report.</p></div>'}</div>`;
+}
+
+function viewSettings(){
+  return `<div class="top"><button data-action="home">Back</button><div class="grow"><h1>Settings</h1></div></div>${storageNote()}
+  <div class="card"><h2>Practitioner details</h2><div class="muted">These appear on every report.</div><div class="grid">
+  ${inp("Title","set|title",settings.title)}${inp("Treating practitioner","set|practitioner",settings.practitioner)}${inp("Treating practitioner practice number","set|practiceNo",settings.practiceNo)}
+  ${inp("Email for authorisation numbers","set|email",settings.email,"email")}${inp("Contact number","set|phone",settings.phone,"tel")}</div></div>
+  <div class="card"><h2>Backup</h2><div class="muted">Patient records and photos stay in this browser on this device. Download a backup file often, and use it to move records to another device.</div>
+  <div class="actions"><button data-action="backup">Download backup</button><label class="btn" for="restore">Restore from backup<input id="restore" type="file" accept=".json,application/json" data-restore="1"></label></div></div>`;
+}
+
+function viewCase(c){
+  const tabs=[["details","Details"],["visits","Visits"],["progress","Progress"],["report","Report"]];
+  const body={details:tabDetails,visits:tabVisits,progress:tabProgress,report:tabReport}[ui.tab](c);
+  return `<div class="top noprint"><button data-action="home">Back</button><div class="grow"><h1>${esc(c.name||"New patient")} ${c.example?'<span class="tag">Example</span>':""}</h1>
+  <div class="muted">${esc([c.site,c.aid,c.aidNo].filter(Boolean).join(" · "))}</div></div></div>
+  <div class="tabs noprint" role="tablist">${tabs.map(([k,l])=>`<button role="tab" aria-selected="${ui.tab===k}" data-action="tab" data-id="${k}">${l}</button>`).join("")}</div>${body}`;
+}
+
+function tabDetails(c){
+  return `<div class="card"><h2>Patient</h2><div class="grid">${inp("Patient name","case|name",c.name)}${inp("Patient ID number","case|idNo",c.idNo,"text",'inputmode="numeric"')}${inp("MyKit billing number","case|billing",c.billing)}</div></div>
+  <div class="card"><h2>Medical aid</h2><div class="grid">${inp("Medical aid name","case|aid",c.aid)}${inp("Medical aid number","case|aidNo",c.aidNo)}${inp("Dependant code","case|dep",c.dep)}</div></div>
+  <div class="card"><h2>Treatment</h2><div class="grid">${inp("Referring surgeon","case|refDr",c.refDr)}${inp("Practice number","case|practiceNo",c.practiceNo)}${inp("Start of treatment","case|startDate",c.startDate,"date")}
+  <label class="f" for="f-freq">Frequency of visits<input id="f-freq" list="freqlist" data-bind="case|frequency" value="${esc(c.frequency)}"><datalist id="freqlist">${OPT.frequency.map(o=>`<option value="${esc(o)}">`).join("")}</datalist></label>
+  ${inp("Next follow up visit","case|nextVisit",c.nextVisit,"date")}</div></div>
+  <div class="card"><h2>Wound</h2><div class="grid">${inp("Site","case|site",c.site,"text",'placeholder="Lower Leg"')}${inp("ICD-10 codes","case|icd",c.icd,"text",'placeholder="S87.0 W01.09 T81.0"')}</div>
+  <div class="muted">Wound description. Select all that apply.</div><div class="chips">${OPT.types.map(o=>`<button aria-pressed="${c.types.includes(o)}" data-action="type" data-id="${esc(o)}">${esc(o)}</button>`).join("")}</div>
+  <div class="muted">Healability</div><div class="chips">${OPT.healability.map(o=>`<button aria-pressed="${c.healability===o}" data-action="heal" data-id="${esc(o)}">${esc(o)}</button>`).join("")}</div></div>
+  <div class="card"><h2>History and motivation</h2>${area_(HISTORY_LABEL,"case|history",c.history,"Treatment history, treatment dates, complications, co-morbidities, request for authorisation")}
+  ${area_("Dressings","case|dressings",c.dressings,"Dressing tray, cleaning solution, primary and secondary dressings")}</div>
+  <div class="actions"><button class="primary" data-action="tab" data-id="visits">Go to visits</button><button class="danger" data-action="delCase" data-confirm="1">Delete patient</button></div>`;
+}
+
+function tabVisits(c){
+  const vs=visitsAsc(c); const order=[...vs].reverse();
+  return `<div class="actions"><button class="primary" data-action="addVisit">Add visit</button></div>
+  <div class="list">${order.map(v=>{ const n=vs.indexOf(v)+1, open=ui.openVisit===v.id, a=area(v);
+    return `<div class="card"><div class="vhead"><div class="grow"><strong>${esc(fmtDate(v.date)||"No date")}</strong><span class="muted">Visit ${n}${dimText(v)?" · "+esc(dimText(v)):""}${a?" · "+a+" cm²":""}${v.phase?" · "+esc(v.phase):""}</span></div>
+    <button class="small" data-action="toggleVisit" data-id="${v.id}">${open?"Close":"Edit"}</button></div>
+    <div class="thumbs">${v.photos.map(p=>`<div class="thumbwrap"><button class="thumb" data-action="zoom" data-id="${p}" aria-label="Enlarge photo"><img data-pid="${p}" alt="Wound photo ${esc(shortDate(v.date))}"></button>${open?`<button class="small danger" data-action="delPhoto" data-id="${v.id}|${p}" data-confirm="1">Remove</button>`:""}</div>`).join("")}
+    <label class="btn small" for="ph-${v.id}">Add photo<input id="ph-${v.id}" type="file" accept="image/*" multiple data-photo="${v.id}"></label></div>
+    ${open?`<div class="grid">${inp("Visit date",`visit|${v.id}|date`,v.date,"date")}</div>
+    <div class="grid three">${inp("Length cm",`visit|${v.id}|l`,v.l,"number",'step="0.1" min="0" inputmode="decimal"')}${inp("Width cm",`visit|${v.id}|w`,v.w,"number",'step="0.1" min="0" inputmode="decimal"')}${inp("Depth cm",`visit|${v.id}|d`,v.d,"number",'step="0.1" min="0" inputmode="decimal"')}</div>
+    <div class="grid">${ASSESS.map(([k,l])=>sel(l,`visit|${v.id}|${k}`,v[k],OPT[k])).join("")}</div>
+    ${area_("Visit note (not printed on the report)",`visit|${v.id}|note`,v.note)}
+    <div class="actions"><button class="primary" data-action="toggleVisit" data-id="${v.id}">Done</button><button class="danger" data-action="delVisit" data-id="${v.id}" data-confirm="1">Delete visit</button></div>`:""}</div>`; }).join("")
+    ||'<div class="card"><p class="muted">No visits yet. Add a visit, take a photo and record the wound dimensions.</p></div>'}</div>`;
+}
+
+function chart(c){
+  const pts=visitsAsc(c).map(v=>({d:v.date,a:area(v)})).filter(p=>p.a!=null&&p.d);
+  if(pts.length<2) return '<p class="muted">Record length and width on two or more visits to see the trend.</p>';
+  const W=640,H=260,L=48,R=20,T=40,B=34; const t=p=>new Date(p.d+"T00:00:00").getTime(); const t0=t(pts[0]), t1=t(pts[pts.length-1]);
+  const raw=Math.max(...pts.map(p=>p.a)); const step=Math.pow(10,Math.floor(Math.log10(raw))); const max=Math.ceil(raw/step)*step;
+  const x=(p,i)=>L+(t1>t0?(t(p)-t0)/(t1-t0):i/(pts.length-1))*(W-L-R), y=a=>T+(1-a/max)*(H-T-B);
+  const line=pts.map((p,i)=>(i?"L":"M")+x(p,i).toFixed(1)+" "+y(p.a).toFixed(1)).join(" ");
+  const ticks=[0,max/2,max];
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Wound area in square centimetres by visit date">
+  ${ticks.map(v=>`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L-8}" y="${y(v)+4}" text-anchor="end" font-size="12" fill="var(--muted)">${v}</text>`).join("")}
+  <text x="${L}" y="12" font-size="12" fill="var(--muted)">Area, cm² (length x width)</text>
+  <path d="${line} L${x(pts[pts.length-1],pts.length-1)} ${y(0)} L${x(pts[0],0)} ${y(0)} Z" fill="var(--accent-soft)"/>
+  <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>
+  ${pts.map((p,i)=>`<circle cx="${x(p,i)}" cy="${y(p.a)}" r="${i===pts.length-1?6:4}" fill="${i===pts.length-1?"var(--accent)":"var(--surface)"}" stroke="var(--accent)" stroke-width="2"/>${pts.length<=8?`<text x="${x(p,i)}" y="${y(p.a)-10}" text-anchor="${i===0?"start":i===pts.length-1?"end":"middle"}" font-size="12" font-weight="600" fill="var(--ink)">${p.a}</text>`:""}`).join("")}
+  <text x="${L}" y="${H-10}" font-size="12" fill="var(--muted)">${esc(shortDate(pts[0].d))}</text><text x="${W-R}" y="${H-10}" text-anchor="end" font-size="12" fill="var(--muted)">${esc(shortDate(pts[pts.length-1].d))}</text></svg>`;
+}
+
+function tabProgress(c){
+  const vs=visitsAsc(c); if(!vs.length) return '<div class="card"><p class="muted">Add a visit with a photo to start tracking.</p></div>';
+  const withA=vs.filter(v=>area(v)!=null), first=withA[0], last=withA[withA.length-1], ch=change(c);
+  const days=vs.length>1?Math.round((new Date(vs[vs.length-1].date)-new Date(vs[0].date))/864e5):0;
+  const pv=vs.filter(v=>v.photos.length), pf=pv[0], pl=pv[pv.length-1];
+  const fig=(v,title)=>`<figure><img data-pid="${v.photos[0]}" data-action="zoom" data-id="${v.photos[0]}" alt="${esc(title)} wound photo"><figcaption><b>${esc(title)} · ${esc(shortDate(v.date))}</b>${esc(dimText(v)||"No dimensions")}</figcaption></figure>`;
+  return `<div class="tiles"><div class="tile"><span class="muted">First area</span><b>${first?first.a??area(first):"-"}${first?" cm²":""}</b></div>
+  <div class="tile"><span class="muted">Latest area</span><b>${last?area(last)+" cm²":"-"}</b></div>
+  <div class="tile"><span class="muted">Change</span><b>${ch==null?"-":(ch>0?"+":"")+ch+"%"}</b>${changePill(c)}</div>
+  <div class="tile"><span class="muted">Visits</span><b>${vs.length}</b><span class="muted">${days} days tracked</span></div></div>
+  <div class="card"><h2>Wound area over time</h2>${chart(c)}</div>
+  ${pf&&pl&&pf!==pl?`<div class="card"><h2>First and latest photo</h2><div class="compare">${fig(pf,"First")}${fig(pl,"Latest")}</div></div>`:""}
+  <div class="card"><h2>Photo timeline</h2><div class="timeline">${pv.map(v=>v.photos.map(p=>`<figure><img data-pid="${p}" data-action="zoom" data-id="${p}" alt="Wound photo ${esc(shortDate(v.date))}"><figcaption><b>${esc(shortDate(v.date))}</b>${esc(dimText(v)||"No dimensions")}${v.phase?"<br>"+esc(v.phase):""}</figcaption></figure>`).join("")).join("")||'<p class="muted">No photos yet.</p>'}</div></div>`;
+}
+
+/* ---------- report model shared by the preview and the PDF ---------- */
+function visitDatesText(c){ const groups=[]; for(const v of visitsAsc(c)){ if(!v.date) continue; const [y,m,d]=v.date.split("-").map(Number); const key=MONTHS[m-1]+" "+y; let g=groups[groups.length-1]; if(!g||g.key!==key){ g={key,days:[]}; groups.push(g); } if(!g.days.includes(d)) g.days.push(d); } return groups.map(g=>g.days.join(", ")+" "+g.key).join("\n"); }
+function reportPhotos(c){ let vs=visitsAsc(c).filter(v=>v.photos.length); const m=c.reportPhotos||"last4"; if(m==="firstlast"&&vs.length>1) vs=[vs[0],vs[vs.length-1]]; else if(m==="last4") vs=vs.slice(-4); else if(m==="none") vs=[];
+  const out=[]; for(const v of vs) for(const p of v.photos) out.push({pid:p,l1:"Photo "+(out.length+1)+": "+fmtDate(v.date,true),l2:dimText(v)?"Dimensions - "+dimText(v):""}); return out; }
+function model(c){ const last=visitsAsc(c).pop()||{}; const who=settings.practitioner, sister=settings.title==="Sr."?"Sister":settings.title;
+  return { icd:c.icd,
+    head:[["Patient Name",c.name],["MyKit Billing Number",c.billing],["Medical Aid Name",c.aid,"Medical aid Number",c.aidNo],["Patient ID Number",c.idNo,"Dep code",c.dep],["Treating practitioner",who,"Practise Number:",settings.practiceNo],["Referring Surgeon",c.refDr,"Practise Number:",c.practiceNo],["Start of Treatment",fmtDate(c.startDate,true)],["Site and picture",c.site]],
+    assess:ASSESS.map(([k,l])=>[l,last[k]||""]),
+    tail:[[HISTORY_LABEL,c.history],["Dressings",c.dressings],["Frequency of visits",c.frequency],["DATES/ Visits",visitDatesText(c)],["Next Follow up visit",c.nextVisit?"Date "+fmtDate(c.nextVisit):""]],
+    foot:[`Please e-mail auth no to ${settings.email} ASAP.`,`For further queries or questions please contact ${settings.title} ${who} on ${settings.phone}.`,"Please see the attached Photos of the wound/s.","Kind Regards",who],
+    info:`This Report has been Prepared by ${who}.`,
+    conf:`The information transmitted, including attachments, is intended only for the person(s) or entity to which it is addressed and may contain confidential and/or privileged material. Any review, re-transmission, dissemination or other use of, or taking of any action in reliance upon this information by persons or entities other than the intended recipient is prohibited. If you received this in error, please contact ${sister} ${who} and destroy any copies of this information.` };
+}
+function tabReport(c){
+  const m=model(c), ph=reportPhotos(c); const top=window.self===window.top;
+  const row=r=>r.length===4?`<tr><td class="l">${esc(r[0])}</td><td>${esc(r[1])}</td><td class="l">${esc(r[2])}</td><td>${esc(r[3])}</td></tr>`:`<tr><td class="l">${esc(r[0])}</td><td colspan="3">${esc(r[1])}</td></tr>`;
+  const cks=(opts,on)=>opts.map(o=>`<span class="ck${on.includes(o)?" on":""}"><i></i>${esc(o)}</span>`).join("");
+  const modes=[["last4","Last 4 visits with photos"],["firstlast","First and latest visit"],["all","All visits"],["none","No photos"]];
+  return `<div class="card noprint"><div class="grid"><label class="f" for="f-rp">Photos on the report<select id="f-rp" data-bind="case|reportPhotos" data-rerender="1">${modes.map(([k,l])=>`<option value="${k}"${(c.reportPhotos||"last4")===k?" selected":""}>${l}</option>`).join("")}</select></label></div>
+  <div class="muted">The assessment rows use the latest visit. Check the preview, then save the PDF and email the file to the medical scheme.</div>
+  <div class="actions"><button class="primary" data-action="pdf">Download PDF</button>${top?'<button data-action="print">Print</button>':""}</div></div>
+  <div class="paperwrap"><div class="paper"><h2>WOUND MANAGEMENT REPORT</h2><div class="icd">${esc(m.icd)}</div><table>
+  ${m.head.map(row).join("")}
+  ${ph.length?`<tr><td colspan="4"><div class="pgrid">${ph.map(p=>`<div><img data-pid="${p.pid}" alt="${esc(p.l1)}"><div>${esc(p.l1)}</div><div>${esc(p.l2)}</div></div>`).join("")}</div></td></tr>`:""}
+  ${m.assess.map(row).join("")}
+  <tr><td class="l">Wound description</td><td colspan="3" style="white-space:normal">${cks(OPT.types,c.types)}</td></tr>
+  <tr><td class="l">Healability</td><td colspan="3" style="white-space:normal">${cks(OPT.healability,[c.healability])}</td></tr>
+  ${m.tail.map(row).join("")}</table>
+  ${m.foot.map(p=>`<p>${esc(p)}</p>`).join("")}
+  <p><b>IMPORTANT INFORMATION</b></p><p>${esc(m.info)}</p><p><b>CONFIDENTIALITY NOTE</b></p><p class="small">${esc(m.conf)}</p></div></div>`;
+}
+
+/* ---------- PDF ---------- */
+const clean = s => String(s??"").replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/[–—]/g,"-").replace(/•/g,"-").replace(/ /g," ").replace(/[^\x09\x0A\x20-\x7E¡-ÿ]/g,"?");
+async function buildPdf(c){
+  const doc=new window.jspdf.jsPDF({unit:"mm",format:"a4"}); const m=model(c);
+  const M=14,W=182,BOT=283,LW=52,PAD=1.8,LH=4.4; let y=18;
+  doc.setLineWidth(0.2); doc.setDrawColor(110); doc.setTextColor(17);
+  doc.setFont("helvetica","bold"); doc.setFontSize(15); doc.text("WOUND MANAGEMENT REPORT",105,y,{align:"center"}); y+=6.5;
+  doc.setFont("helvetica","normal"); doc.setFontSize(10); if(m.icd){ doc.text(clean(m.icd),105,y,{align:"center"}); y+=3; } y+=3;
+  const page=()=>{ doc.addPage(); y=16; };
+  function row(cells){ doc.setFontSize(9.5);
+    const pc=cells.map(c=>{ doc.setFont("helvetica",c.b?"bold":"normal"); return {...c,lines:doc.splitTextToSize(clean(c.t),c.w-2*PAD)}; });
+    const total=Math.max(1,...pc.map(c=>c.lines.length)); let start=0;
+    if(total<=8 && y+total*LH+2*PAD>BOT) page();
+    while(start<total){ let fit=Math.floor((BOT-y-2*PAD)/LH); if(fit<1){ page(); continue; }
+      const n=Math.min(fit,total-start), h=n*LH+2*PAD; let x=M;
+      for(const c of pc){ if(c.b){ doc.setFillColor(236,241,241); doc.rect(x,y,c.w,h,"FD"); } else doc.rect(x,y,c.w,h);
+        doc.setFont("helvetica",c.b?"bold":"normal"); const ls=c.lines.slice(start,start+n); if(ls.length) doc.text(ls,x+PAD,y+PAD+3.2,{lineHeightFactor:LH/(9.5*0.3528)}); x+=c.w; }
+      y+=h; start+=n; } }
+  const rows=list=>{ for(const r of list) row(r.length===4?[{t:r[0],w:LW,b:1},{t:r[1],w:44},{t:r[2],w:40,b:1},{t:r[3],w:46}]:[{t:r[0],w:LW,b:1},{t:r[1],w:W-LW}]); };
+  function checks(label,opts,on){ doc.setFontSize(9.5); doc.setFont("helvetica","bold"); const vw=W-LW-2*PAD, items=[]; let cx=0,line=0;
+    for(const o of opts){ const tw=doc.getTextWidth(o)+4.5+5; if(cx>0&&cx+tw>vw+5){ line++; cx=0; } items.push({o,x:cx,line}); cx+=tw; }
+    const lab=doc.splitTextToSize(label,LW-2*PAD), LH2=5.4, h=Math.max(line+1,lab.length)*LH2+2*PAD; if(y+h>BOT) page();
+    doc.setFillColor(236,241,241); doc.rect(M,y,LW,h,"FD"); doc.rect(M+LW,y,W-LW,h); doc.text(lab,M+PAD,y+PAD+3.2);
+    for(const it of items){ const sel=on.includes(it.o), bx=M+LW+PAD+it.x, by=y+PAD+it.line*LH2+0.4; doc.setFillColor(30,30,30); doc.rect(bx,by,3,3,sel?"FD":"S"); doc.setFont("helvetica",sel?"bold":"normal"); doc.text(it.o,bx+4.3,by+2.7); }
+    y+=h; }
+  rows(m.head);
+  const ph=reportPhotos(c), CW=W/2, BW=CW-6, BH=58;
+  for(let i=0;i<ph.length;i+=2){ const hh=BH+15; if(y+hh>BOT) page();
+    for(let j=0;j<2;j++){ const p=ph[i+j], x=M+j*CW; doc.rect(x,y,CW,hh); if(!p) continue; const img=await getPhoto(p.pid);
+      if(img){ const s=Math.min(BW/img.w,BH/img.h), iw=img.w*s, ih=img.h*s; try{ doc.addImage(img.data,"JPEG",x+(CW-iw)/2,y+3+(BH-ih)/2,iw,ih,undefined,"FAST"); }catch(e){} }
+      doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.text(clean(p.l1),x+3,y+BH+7.5); if(p.l2) doc.text(clean(p.l2),x+3,y+BH+12); }
+    y+=hh; }
+  rows(m.assess); checks("Wound description",OPT.types,c.types); checks("Healability",OPT.healability,[c.healability]); rows(m.tail);
+  function para(t,o={}){ doc.setFont("helvetica",o.b?"bold":"normal"); doc.setFontSize(o.s||10); const lh=(o.s||10)*0.3528*1.3; const ls=doc.splitTextToSize(clean(t),W);
+    for(const l of ls){ if(y+lh>BOT+4) page(); y+=lh; doc.text(l,M,y); } y+=o.gap??2.5; }
+  y+=4; m.foot.forEach((t,i)=>para(t,{gap:i===3?0.5:2.5}));
+  y+=2; para("IMPORTANT INFORMATION",{b:1}); para(m.info); para("CONFIDENTIALITY NOTE",{b:1}); para(m.conf,{s:8.5});
+  return doc.output("blob");
+}
+async function saveFile(filename,blob){
+  let dl=null; try{ if(window.claude&&window.claude.use) dl=await window.claude.use("downloads"); }catch(e){}
+  if(dl){ try{ await dl.save({filename,data:blob}); toast("File saved"); }catch(e){ toast(e&&e.code==="declined"?"Save cancelled":"This view did not save the file. Open the page in a browser and try again."); } return; }
+  if(matchMedia("(pointer:coarse)").matches&&navigator.canShare){ try{ const f=new File([blob],filename,{type:blob.type||"application/octet-stream"});
+    if(navigator.canShare({files:[f]})){ await navigator.share({files:[f],title:filename}); return; } }catch(e){ if(e&&e.name==="AbortError") return; } }
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),20000);
+}
+
+/* ---------- photos, backup ---------- */
+async function fileToPhoto(file){ const url=URL.createObjectURL(file); try{ const img=new Image(); await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; img.src=url; });
+  const s=Math.min(1,1400/Math.max(img.naturalWidth,img.naturalHeight)); const cv=document.createElement("canvas"); cv.width=Math.round(img.naturalWidth*s); cv.height=Math.round(img.naturalHeight*s);
+  cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height); return {data:cv.toDataURL("image/jpeg",0.82),w:cv.width,h:cv.height}; } finally{ URL.revokeObjectURL(url); } }
+async function backup(){ const photos={}; for(const k of await store.keys("photos")) photos[k]=await store.get("photos",k);
+  await saveFile("wound-report-backup-"+today()+".json",new Blob([JSON.stringify({app:"wound-report-tracker",version:1,settings,cases,photos})],{type:"application/json"})); }
+async function restore(file){ try{ const d=JSON.parse(await file.text()); if(d.app!=="wound-report-tracker") throw 0;
+  for(const [k,p] of Object.entries(d.photos||{})) await store.set("photos",k,p);
+  for(const c of d.cases||[]){ const i=cases.findIndex(x=>x.id===c.id); if(i>=0) cases[i]=c; else cases.push(c); await store.set("cases",c.id,c); }
+  if(d.settings){ settings={...settings,...d.settings}; await store.set("meta","settings",settings); }
+  toast("Backup restored: "+(d.cases||[]).length+" patients"); ui.view="home"; render(); }catch(e){ toast("This file is not a Wound Report Tracker backup"); } }
+
+/* ---------- events ---------- */
+document.addEventListener("input",e=>{ const b=e.target.dataset&&e.target.dataset.bind; if(!b) return; const [kind,a,k]=b.split("|"); const val=e.target.value;
+  if(kind==="set"){ settings[a]=val; queueSettings(); return; } const c=cur(); if(!c) return;
+  if(kind==="case") c[a]=val; else { const v=c.visits.find(x=>x.id===a); if(v) v[k]=val; } queueSave(); if(e.target.dataset.rerender) render(); });
+document.addEventListener("change",async e=>{ const t=e.target; if(t.dataset.photo){ const c=cur(), v=c&&c.visits.find(x=>x.id===t.dataset.photo); if(!v) return; let n=0;
+    for(const f of t.files){ try{ const p=await fileToPhoto(f), id=uid(); await store.set("photos",id,p); v.photos.push(id); n++; }catch(err){ toast("One file is not an image this browser reads"); } }
+    if(n){ await saveCase(c); toast(n+" photo"+(n>1?"s":"")+" added"); } render(); }
+  else if(t.dataset.restore&&t.files[0]) restore(t.files[0]); });
+const armed=new WeakMap();
+document.addEventListener("click",async e=>{ const el=e.target.closest("[data-action]"); if(!el) return; const act=el.dataset.action, id=el.dataset.id, c=cur();
+  if(el.dataset.confirm&&!armed.get(el)){ armed.set(el,el.textContent); el.textContent="Tap again to confirm"; setTimeout(()=>{ if(el.isConnected&&armed.get(el)){ el.textContent=armed.get(el); armed.delete(el); } },3000); return; }
+  switch(act){
+    case "home": if(c) await saveCase(c); ui.view="home"; ui.caseId=null; break;
+    case "settings": ui.view="settings"; break;
+    case "newCase": { const n=newCase(); cases.push(n); await saveCase(n); Object.assign(ui,{view:"case",caseId:n.id,tab:"details"}); break; }
+    case "openCase": Object.assign(ui,{view:"case",caseId:id,tab:"details",openVisit:null}); break;
+    case "tab": ui.tab=id; break;
+    case "type": c.types=c.types.includes(id)?c.types.filter(x=>x!==id):[...c.types,id]; saveCase(c); break;
+    case "heal": c.healability=c.healability===id?"":id; saveCase(c); break;
+    case "addVisit": { const v=newVisit(c); c.visits.push(v); ui.openVisit=v.id; saveCase(c); break; }
+    case "toggleVisit": ui.openVisit=ui.openVisit===id?null:id; saveCase(c); break;
+    case "delVisit": { const v=c.visits.find(x=>x.id===id); for(const p of v.photos) await store.del("photos",p); c.visits=c.visits.filter(x=>x.id!==id); saveCase(c); break; }
+    case "delPhoto": { const [vid,pid]=id.split("|"); const v=c.visits.find(x=>x.id===vid); v.photos=v.photos.filter(p=>p!==pid); await store.del("photos",pid); saveCase(c); break; }
+    case "delCase": for(const v of c.visits) for(const p of v.photos) await store.del("photos",p); await store.del("cases",c.id); cases=cases.filter(x=>x.id!==c.id); ui.view="home"; ui.caseId=null; toast("Patient deleted"); break;
+    case "zoom": { const p=await getPhoto(id); if(p){ $("#lightimg").src=p.data; $("#lightbox").showModal(); } return; }
+    case "pdf": { if(!window.jspdf){ toast("The PDF library did not load. Check your connection and reload."); return; } toast("Building the PDF"); try{ const blob=await buildPdf(c); await saveFile("Wound report "+(c.name||"patient").replace(/[^\w ]+/g,"").trim()+" "+today()+".pdf",blob); }catch(err){ toast("The PDF did not build: "+(err.message||err)); } return; }
+    case "print": window.print(); return;
+    case "backup": await backup(); return;
+  }
+  render(); if(["home","settings","newCase","openCase","tab"].includes(act)) window.scrollTo(0,0);
+});
+window.addEventListener("pagehide",()=>{ const c=cur(); if(c) saveCase(c); });
+
+(async function init(){
+  const s=await store.get("meta","settings"); if(s) settings={...settings,...s};
+  cases=await store.all("cases")||[];
+  if(!cases.length && !(await store.get("meta","seeded"))) await seed();
+  render();
+  if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+  if(navigator.storage&&navigator.storage.persist) navigator.storage.persist().catch(()=>{});
+})();
+</script>
+</body>
+</html>
