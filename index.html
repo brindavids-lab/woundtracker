@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- Privacy lock: the page loads its own files only and the browser blocks every outgoing data connection. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; manifest-src 'self'; worker-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Wound Report Tracker</title>
 <link rel="manifest" href="manifest.webmanifest">
@@ -11,16 +13,14 @@
 <meta name="apple-mobile-web-app-title" content="Wound Reports">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icons/icon-192.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   /* Layout idea: phone-first single column, one case at a time, four tabs that follow the clinic workflow. */
   --bg:#f2f6f6; --surface:#ffffff; --ink:#12262b; --muted:#566b70; --line:#d3dedf;
   --accent:#0b6b6f; --accent-ink:#ffffff; --accent-soft:#dcefee;
   --good:#1c7548; --warn:#96560a; --bad:#b0362e;
-  --display:"Sora","Segoe UI",system-ui,sans-serif;
-  --body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --display:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif;
+  --body:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -223,7 +223,8 @@ function viewHome(){
     return `<button class="caserow" data-action="openCase" data-id="${c.id}">${pid?`<span class="thumb" style="width:64px;height:64px;flex:none"><img data-pid="${pid}" alt=""></span>`:""}
     <span class="grow"><strong>${esc(c.name||"Unnamed patient")} ${c.example?'<span class="tag">Example</span>':""}</strong>
     <span class="muted">${esc([c.site,c.aid].filter(Boolean).join(" · ")||"No details yet")}</span>
-    <span class="muted">${vs.length} visit${vs.length===1?"":"s"}${last?" · last "+shortDate(last.date):""}</span></span>${changePill(c)}</button>`; }).join("")||'<div class="card"><p class="muted">No patients yet. Press New patient to start a report.</p></div>'}</div>`;
+    <span class="muted">${vs.length} visit${vs.length===1?"":"s"}${last?" · last "+shortDate(last.date):""}</span></span>${changePill(c)}</button>`; }).join("")||'<div class="card"><p class="muted">No patients yet. Press New patient to start a report.</p></div>'}</div>
+  <p class="muted">Private by design. Patient records and photos stay on this device. This app sends nothing to any server. Open source under the MIT licence.</p>`;
 }
 
 function viewSettings(){
