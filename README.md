@@ -4,6 +4,7 @@ A web app for wound management reports with photo tracking. It produces the repo
 
 - Record patient, medical aid and wound details.
 - Add visits with photos, dimensions and a wound assessment.
+- Optional: measure on the photo. Mark a known length on a ruler in the picture, trace the wound edge, and the app calculates length, width and area. Manual entry always remains available.
 - Follow wound area over time on a chart and a photo timeline.
 - Download the report as a PDF.
 

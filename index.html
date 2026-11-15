@@ -104,6 +104,13 @@ dialog::backdrop{background:rgba(0,0,0,.8)}
 dialog img{max-width:96vw;max-height:86vh;display:block;border-radius:8px}
 dialog form{display:flex;justify-content:center;padding-top:8px}
 input[type=file]{position:absolute;width:1px;height:1px;opacity:0;min-height:0;padding:0}
+button:disabled{opacity:.5;cursor:not-allowed}
+#measure{position:fixed;inset:0;background:var(--bg);z-index:20;display:none;flex-direction:column}
+#measure.on{display:flex}
+#measure .mhead{padding:10px 16px;display:flex;flex-direction:column;gap:2px}
+#mfoot{padding:10px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+#mwrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:#111;overflow:hidden}
+#mcanvas{touch-action:none;display:block}
 @media (max-width:420px){.grid.three{grid-template-columns:1fr 1fr 1fr}.tabs button{font-size:.8rem}}
 @media (prefers-reduced-motion:reduce){#toast{transition:none}}
 @media print{
@@ -117,6 +124,7 @@ input[type=file]{position:absolute;width:1px;height:1px;opacity:0;min-height:0;p
 <body>
 <div id="app"></div>
 <div id="toast" role="status" aria-live="polite"></div>
+<div id="measure" role="dialog" aria-label="Measure wound on photo"><div class="mhead"><strong>Measure on photo</strong><span id="mhelp" class="muted"></span></div><div id="mwrap"><canvas id="mcanvas"></canvas></div><div id="mfoot"></div></div>
 <dialog id="lightbox"><img alt="Wound photo enlarged" id="lightimg"><form method="dialog"><button>Close</button></form></dialog>
 <script src="jspdf.umd.min.js"></script>
 <script>
@@ -149,7 +157,7 @@ const ord = n => n+(n%100>=11&&n%100<=13?"th":["th","st","nd","rd"][n%10]||"th")
 function fmtDate(iso, ordinal){ if(!iso) return ""; const [y,m,d]=iso.split("-").map(Number); if(!y||!m||!d) return iso; return (ordinal?ord(d):d)+" "+MONTHS[m-1]+" "+y; }
 function shortDate(iso){ if(!iso) return ""; const [y,m,d]=iso.split("-").map(Number); return d+" "+MONTHS[m-1].slice(0,3)+" "+y; }
 const num = v => { const n=parseFloat(v); return isFinite(n)&&n>0?n:null; };
-const area = v => { const l=num(v.l), w=num(v.w); return l&&w ? Math.round(l*w*10)/10 : null; };
+const area = v => { const t=num(v.areaTraced); if(t) return t; const l=num(v.l), w=num(v.w); return l&&w ? Math.round(l*w*10)/10 : null; };
 function dimText(v){ const p=[v.l,v.w,v.d].filter(x=>x!==""&&x!=null).map(x=>x+"cm"); return p.join(" x "); }
 const visitsAsc = c => [...c.visits].sort((a,b)=>(a.date||"").localeCompare(b.date||"")||a.id.localeCompare(b.id));
 function change(c){ const pts=visitsAsc(c).map(area).filter(a=>a!=null); if(pts.length<2) return null; return Math.round((pts[pts.length-1]-pts[0])/pts[0]*100); }
@@ -187,7 +195,7 @@ function newVisit(c){ const last=visitsAsc(c).pop()||{}; const v={id:uid(),date:
 
 /* ---------- example case (fictional, drawn images) ---------- */
 function drawExample(l,w,label){ const cv=document.createElement("canvas"); cv.width=800; cv.height=600; const g=cv.getContext("2d");
-  g.fillStyle="#d9c2b0"; g.fillRect(0,0,800,600); g.fillStyle="#b9463f"; g.beginPath(); g.ellipse(400,300,l*32,w*32,0,0,Math.PI*2); g.fill();
+  g.fillStyle="#d9c2b0"; g.fillRect(0,0,800,600); g.fillStyle="#b9463f"; g.beginPath(); g.ellipse(400,300,l*16,w*16,0,0,Math.PI*2); g.fill();
   g.strokeStyle="#7d2a26"; g.lineWidth=6; g.stroke(); g.fillStyle="#fff"; g.fillRect(40,520,320,40); g.fillStyle="#111";
   for(let i=0;i<=10;i++) g.fillRect(40+i*32,520,2,i%5?14:24); g.font="600 22px sans-serif"; g.fillText("EXAMPLE IMAGE  "+label,40,50);
   return {data:cv.toDataURL("image/jpeg",0.8),w:800,h:600}; }
@@ -265,12 +273,13 @@ function tabVisits(c){
   const vs=visitsAsc(c); const order=[...vs].reverse();
   return `<div class="actions"><button class="primary" data-action="addVisit">Add visit</button></div>
   <div class="list">${order.map(v=>{ const n=vs.indexOf(v)+1, open=ui.openVisit===v.id, a=area(v);
-    return `<div class="card"><div class="vhead"><div class="grow"><strong>${esc(fmtDate(v.date)||"No date")}</strong><span class="muted">Visit ${n}${dimText(v)?" · "+esc(dimText(v)):""}${a?" · "+a+" cm²":""}${v.phase?" · "+esc(v.phase):""}</span></div>
+    return `<div class="card"><div class="vhead"><div class="grow"><strong>${esc(fmtDate(v.date)||"No date")}</strong><span class="muted">Visit ${n}${dimText(v)?" · "+esc(dimText(v)):""}${a?" · "+a+" cm²"+(num(v.areaTraced)?" traced":""):""}${v.phase?" · "+esc(v.phase):""}</span></div>
     <button class="small" data-action="toggleVisit" data-id="${v.id}">${open?"Close":"Edit"}</button></div>
-    <div class="thumbs">${v.photos.map(p=>`<div class="thumbwrap"><button class="thumb" data-action="zoom" data-id="${p}" aria-label="Enlarge photo"><img data-pid="${p}" alt="Wound photo ${esc(shortDate(v.date))}"></button>${open?`<button class="small danger" data-action="delPhoto" data-id="${v.id}|${p}" data-confirm="1">Remove</button>`:""}</div>`).join("")}
+    <div class="thumbs">${v.photos.map(p=>`<div class="thumbwrap"><button class="thumb" data-action="zoom" data-id="${p}" aria-label="Enlarge photo"><img data-pid="${p}" alt="Wound photo ${esc(shortDate(v.date))}"></button>${open?`<button class="small" data-action="measure" data-id="${v.id}|${p}">Measure</button><button class="small danger" data-action="delPhoto" data-id="${v.id}|${p}" data-confirm="1">Remove</button>`:""}</div>`).join("")}
     <label class="btn small" for="ph-${v.id}">Add photo<input id="ph-${v.id}" type="file" accept="image/*" multiple data-photo="${v.id}"></label></div>
     ${open?`<div class="grid">${inp("Visit date",`visit|${v.id}|date`,v.date,"date")}</div>
     <div class="grid three">${inp("Length cm",`visit|${v.id}|l`,v.l,"number",'step="0.1" min="0" inputmode="decimal"')}${inp("Width cm",`visit|${v.id}|w`,v.w,"number",'step="0.1" min="0" inputmode="decimal"')}${inp("Depth cm",`visit|${v.id}|d`,v.d,"number",'step="0.1" min="0" inputmode="decimal"')}</div>
+    <div class="muted">${num(v.areaTraced)?`Traced area from photo: ${esc(v.areaTraced)} cm². The chart uses this value. <button class="small" data-action="clearTrace" data-id="${v.id}">Clear traced area</button>`:"Type the measurements. Optional: press Measure under a photo to trace the wound against a ruler."}</div>
     <div class="grid">${ASSESS.map(([k,l])=>sel(l,`visit|${v.id}|${k}`,v[k],OPT[k])).join("")}</div>
     ${area_("Visit note (not printed on the report)",`visit|${v.id}|note`,v.note)}
     <div class="actions"><button class="primary" data-action="toggleVisit" data-id="${v.id}">Done</button><button class="danger" data-action="delVisit" data-id="${v.id}" data-confirm="1">Delete visit</button></div>`:""}</div>`; }).join("")
@@ -304,7 +313,7 @@ function tabProgress(c){
   <div class="tile"><span class="muted">Latest area</span><b>${last?area(last)+" cm²":"-"}</b></div>
   <div class="tile"><span class="muted">Change</span><b>${ch==null?"-":(ch>0?"+":"")+ch+"%"}</b>${changePill(c)}</div>
   <div class="tile"><span class="muted">Visits</span><b>${vs.length}</b><span class="muted">${days} days tracked</span></div></div>
-  <div class="card"><h2>Wound area over time</h2>${chart(c)}</div>
+  <div class="card"><h2>Wound area over time</h2>${chart(c)}${withA.some(v=>num(v.areaTraced))&&withA.some(v=>!num(v.areaTraced))?'<div class="notice">Some visits use traced area and others use length x width. Traced area reads lower on the same wound, so compare those visits with care.</div>':""}</div>
   ${pf&&pl&&pf!==pl?`<div class="card"><h2>First and latest photo</h2><div class="compare">${fig(pf,"First")}${fig(pl,"Latest")}</div></div>`:""}
   <div class="card"><h2>Photo timeline</h2><div class="timeline">${pv.map(v=>v.photos.map(p=>`<figure><img data-pid="${p}" data-action="zoom" data-id="${p}" alt="Wound photo ${esc(shortDate(v.date))}"><figcaption><b>${esc(shortDate(v.date))}</b>${esc(dimText(v)||"No dimensions")}${v.phase?"<br>"+esc(v.phase):""}</figcaption></figure>`).join("")).join("")||'<p class="muted">No photos yet.</p>'}</div></div>`;
 }
@@ -312,7 +321,7 @@ function tabProgress(c){
 /* ---------- report model shared by the preview and the PDF ---------- */
 function visitDatesText(c){ const groups=[]; for(const v of visitsAsc(c)){ if(!v.date) continue; const [y,m,d]=v.date.split("-").map(Number); const key=MONTHS[m-1]+" "+y; let g=groups[groups.length-1]; if(!g||g.key!==key){ g={key,days:[]}; groups.push(g); } if(!g.days.includes(d)) g.days.push(d); } return groups.map(g=>g.days.join(", ")+" "+g.key).join("\n"); }
 function reportPhotos(c){ let vs=visitsAsc(c).filter(v=>v.photos.length); const m=c.reportPhotos||"last4"; if(m==="firstlast"&&vs.length>1) vs=[vs[0],vs[vs.length-1]]; else if(m==="last4") vs=vs.slice(-4); else if(m==="none") vs=[];
-  const out=[]; for(const v of vs) for(const p of v.photos) out.push({pid:p,l1:"Photo "+(out.length+1)+": "+fmtDate(v.date,true),l2:dimText(v)?"Dimensions - "+dimText(v):""}); return out; }
+  const out=[]; for(const v of vs) for(const p of v.photos) out.push({pid:p,l1:"Photo "+(out.length+1)+": "+fmtDate(v.date,true),l2:(dimText(v)?"Dimensions - "+dimText(v):"")+(num(v.areaTraced)?(dimText(v)?", ":"")+"traced area "+v.areaTraced+" cm²":"")}); return out; }
 function model(c){ const last=visitsAsc(c).pop()||{}; const who=settings.practitioner, sister=settings.title==="Sr."?"Sister":settings.title;
   return { icd:c.icd,
     head:[["Patient Name",c.name],["MyKit Billing Number",c.billing],["Medical Aid Name",c.aid,"Medical aid Number",c.aidNo],["Patient ID Number",c.idNo,"Dep code",c.dep],["Treating practitioner",who,"Practise Number:",settings.practiceNo],["Referring Surgeon",c.refDr,"Practise Number:",c.practiceNo],["Start of Treatment",fmtDate(c.startDate,true)],["Site and picture",c.site]],
@@ -400,8 +409,45 @@ async function restore(file){ try{ const d=JSON.parse(await file.text()); if(d.a
   if(d.settings){ settings={...settings,...d.settings}; await store.set("meta","settings",settings); }
   toast("Backup restored: "+(d.cases||[]).length+" patients"); ui.view="home"; render(); }catch(e){ toast("This file is not a Wound Report Tracker backup"); } }
 
+/* ---------- optional: measure length, width and area on a photo against a ruler ---------- */
+let M=null;
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+async function mOpen(vid,pid){ const p=await getPhoto(pid); if(!p) return; const img=new Image(); await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; img.src=p.data; });
+  M={vid,pid,img,step:"cal",cal:[],calCm:"1",path:[],drag:-1,tracing:false,res:null}; $("#measure").classList.add("on"); mFoot(); }
+function mClose(){ $("#measure").classList.remove("on"); M=null; }
+function mFit(){ if(!M) return; const w=$("#mwrap"), cv=$("#mcanvas"), dpr=window.devicePixelRatio||1, iw=M.img.naturalWidth, ih=M.img.naturalHeight;
+  M.s=Math.min(w.clientWidth/iw,w.clientHeight/ih); cv.style.width=iw*M.s+"px"; cv.style.height=ih*M.s+"px"; cv.width=Math.round(iw*M.s*dpr); cv.height=Math.round(ih*M.s*dpr); mDraw(); }
+function mDraw(){ const g=$("#mcanvas").getContext("2d"), dpr=window.devicePixelRatio||1, k=1/M.s; g.setTransform(dpr*M.s,0,0,dpr*M.s,0,0); g.drawImage(M.img,0,0); g.lineJoin=g.lineCap="round";
+  if(M.path.length>1){ g.beginPath(); M.path.forEach((p,i)=>i?g.lineTo(p.x,p.y):g.moveTo(p.x,p.y)); if(M.step==="done"){ g.closePath(); g.fillStyle="rgba(0,220,255,.2)"; g.fill(); } g.strokeStyle="#00dcff"; g.lineWidth=3*k; g.stroke(); }
+  if(M.res) for(const [a,b,col] of [[M.res.a,M.res.b,"#ffffff"],[M.res.c,M.res.d,"#ffe14d"]]){ g.beginPath(); g.moveTo(a.x,a.y); g.lineTo(b.x,b.y); g.strokeStyle=col; g.lineWidth=2*k; g.setLineDash([7*k,5*k]); g.stroke(); g.setLineDash([]); }
+  if(M.cal.length===2){ g.beginPath(); g.moveTo(M.cal[0].x,M.cal[0].y); g.lineTo(M.cal[1].x,M.cal[1].y); g.strokeStyle="#7CFF4D"; g.lineWidth=2.5*k; g.stroke(); }
+  for(const p of M.cal){ g.beginPath(); g.arc(p.x,p.y,10*k,0,Math.PI*2); g.strokeStyle="#7CFF4D"; g.lineWidth=2.5*k; g.stroke(); g.beginPath(); g.arc(p.x,p.y,1.8*k,0,Math.PI*2); g.fillStyle="#fff"; g.fill(); } }
+function mCompute(){ const P=M.path; let pts=P; if(P.length>400) pts=Array.from({length:400},(_,i)=>P[Math.floor(i*P.length/400)]);
+  let A=0; for(let i=0;i<P.length;i++){ const p=P[i], q=P[(i+1)%P.length]; A+=p.x*q.y-q.x*p.y; } A=Math.abs(A)/2;
+  let best=0,a=pts[0],b=pts[0]; for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){ const d=dist(pts[i],pts[j]); if(d>best){ best=d; a=pts[i]; b=pts[j]; } }
+  if(best<=0||A<=0) return false; const nx=-(b.y-a.y)/best, ny=(b.x-a.x)/best; let mn=Infinity,mx=-Infinity,pm=a;
+  for(const p of pts){ const t=(p.x-a.x)*nx+(p.y-a.y)*ny; if(t<mn){ mn=t; pm=p; } if(t>mx) mx=t; }
+  const ppc=dist(M.cal[0],M.cal[1])/num(M.calCm), wpx=mx-mn; if(!(ppc>0)) return false;
+  M.res={a,b,c:pm,d:{x:pm.x+nx*wpx,y:pm.y+ny*wpx},L:best/ppc,W:wpx/ppc,A:A/(ppc*ppc)}; return true; }
+function mFoot(){ const f=$("#mfoot"), h=$("#mhelp");
+  if(M.step==="cal"){ h.textContent="Step 1 of 2. Tap both ends of a known length on the ruler, for example 0 and 5 cm. Drag a point to adjust.";
+    f.innerHTML=`<label class="f" for="m-cm" style="flex:1;min-width:150px">Real distance between the points, cm<input id="m-cm" type="number" step="0.1" min="0.1" inputmode="decimal" value="${esc(M.calCm)}"></label><button class="primary" data-action="mNext"${M.cal.length<2?" disabled":""}>Next: trace wound</button><button data-action="mCancel">Cancel</button>`; }
+  else if(M.step==="trace"){ h.textContent="Step 2 of 2. Trace around the wound edge in one stroke.";
+    f.innerHTML=`<button data-action="mBack">Back to ruler</button><button data-action="mCancel">Cancel</button>`; }
+  else { h.textContent=`Length ${M.res.L.toFixed(1)} cm (longest axis). Width ${M.res.W.toFixed(1)} cm (at right angles). Area ${M.res.A.toFixed(1)} cm². Trace again to redo.`;
+    f.innerHTML=`<button class="primary" data-action="mUse">Use these measurements</button><button data-action="mBack">Back to ruler</button><button data-action="mCancel">Cancel</button>`; }
+  mFit(); }
+(function(){ const cv=$("#mcanvas"); const pt=e=>{ const r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)/M.s,y:(e.clientY-r.top)/M.s}; };
+  cv.addEventListener("pointerdown",e=>{ if(!M) return; e.preventDefault(); try{ cv.setPointerCapture(e.pointerId); }catch(x){} const p=pt(e);
+    if(M.step==="cal"){ const near=M.cal.findIndex(c=>dist(c,p)*M.s<28); if(near>=0) M.drag=near; else if(M.cal.length<2){ M.cal.push(p); M.drag=M.cal.length-1; } else { M.drag=dist(M.cal[0],p)<dist(M.cal[1],p)?0:1; M.cal[M.drag]=p; } mDraw(); }
+    else { const was=M.step; M.step="trace"; M.res=null; M.path=[p]; M.tracing=true; if(was!=="trace") mFoot(); else mDraw(); } });
+  cv.addEventListener("pointermove",e=>{ if(!M) return; const p=pt(e); if(M.step==="cal"&&M.drag>=0){ M.cal[M.drag]=p; mDraw(); } else if(M.tracing&&dist(M.path[M.path.length-1],p)*M.s>2){ M.path.push(p); mDraw(); } });
+  const up=()=>{ if(!M) return; if(M.step==="cal"){ if(M.drag>=0){ M.drag=-1; mFoot(); } return; } if(!M.tracing) return; M.tracing=false;
+    if(M.path.length<8||!mCompute()){ M.path=[]; M.res=null; mDraw(); toast("Trace around the whole wound edge in one stroke"); return; } M.step="done"; mFoot(); };
+  cv.addEventListener("pointerup",up); cv.addEventListener("pointercancel",up); window.addEventListener("resize",mFit); })();
+
 /* ---------- events ---------- */
-document.addEventListener("input",e=>{ const b=e.target.dataset&&e.target.dataset.bind; if(!b) return; const [kind,a,k]=b.split("|"); const val=e.target.value;
+document.addEventListener("input",e=>{ if(M&&e.target.id==="m-cm"){ M.calCm=e.target.value; return; } const b=e.target.dataset&&e.target.dataset.bind; if(!b) return; const [kind,a,k]=b.split("|"); const val=e.target.value;
   if(kind==="set"){ settings[a]=val; queueSettings(); return; } const c=cur(); if(!c) return;
   if(kind==="case") c[a]=val; else { const v=c.visits.find(x=>x.id===a); if(v) v[k]=val; } queueSave(); if(e.target.dataset.rerender) render(); });
 document.addEventListener("change",async e=>{ const t=e.target; if(t.dataset.photo){ const c=cur(), v=c&&c.visits.find(x=>x.id===t.dataset.photo); if(!v) return; let n=0;
@@ -424,6 +470,12 @@ document.addEventListener("click",async e=>{ const el=e.target.closest("[data-ac
     case "delVisit": { const v=c.visits.find(x=>x.id===id); for(const p of v.photos) await store.del("photos",p); c.visits=c.visits.filter(x=>x.id!==id); saveCase(c); break; }
     case "delPhoto": { const [vid,pid]=id.split("|"); const v=c.visits.find(x=>x.id===vid); v.photos=v.photos.filter(p=>p!==pid); await store.del("photos",pid); saveCase(c); break; }
     case "delCase": for(const v of c.visits) for(const p of v.photos) await store.del("photos",p); await store.del("cases",c.id); cases=cases.filter(x=>x.id!==c.id); ui.view="home"; ui.caseId=null; toast("Patient deleted"); break;
+    case "clearTrace": { const v=c.visits.find(x=>x.id===id); v.areaTraced=""; saveCase(c); break; }
+    case "measure": { const [vid,pid]=id.split("|"); await mOpen(vid,pid); return; }
+    case "mNext": if(!num(M.calCm)){ toast("Enter the real distance between the two points in cm"); return; } M.step="trace"; mFoot(); return;
+    case "mBack": M.step="cal"; M.path=[]; M.res=null; mFoot(); return;
+    case "mCancel": mClose(); return;
+    case "mUse": { const v=c.visits.find(x=>x.id===M.vid); if(v){ v.l=M.res.L.toFixed(1); v.w=M.res.W.toFixed(1); v.areaTraced=M.res.A.toFixed(1); saveCase(c); toast("Length, width and traced area saved. Check the values."); } mClose(); break; }
     case "zoom": { const p=await getPhoto(id); if(p){ $("#lightimg").src=p.data; $("#lightbox").showModal(); } return; }
     case "pdf": { if(!window.jspdf){ toast("The PDF library did not load. Check your connection and reload."); return; } toast("Building the PDF"); try{ const blob=await buildPdf(c); await saveFile("Wound report "+(c.name||"patient").replace(/[^\w ]+/g,"").trim()+" "+today()+".pdf",blob); }catch(err){ toast("The PDF did not build: "+(err.message||err)); } return; }
     case "print": window.print(); return;
